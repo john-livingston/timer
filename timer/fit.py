@@ -1,0 +1,327 @@
+import os
+import pickle
+import re
+import numpy as np
+import matplotlib.pyplot as plt
+import arviz as az
+from astropy.time import Time
+
+from . import io, util, plot, model
+
+
+defaults = dict(
+
+    model = dict(
+        fixed = ['period', 'u_star'], # m_star r_star t0 period ror b dur u_star
+        fit_basis = 'duration',
+        chromatic = False,
+        include_mean = True,
+        unif = ['t0'],
+        unif_nsig = 10,
+        use_gp = False,
+    ),
+
+    sampler = dict(
+        tune = 2000,
+        draws = 2000,
+        chains = 2,
+        cores = 2,
+        clobber = False,
+        inferencedata = False
+    ),
+
+    data = dict(
+        spline = False,
+        add_bias = False,
+        quadratic = False,
+        trend = None,
+        trim_beg = None,
+        trim_end = None,
+        nsig_clip = 7,
+        binsize = 5/1440,
+        chunk_offset = False,
+        chunk_thresh = 0,
+    ),
+)
+
+class TransitFit:
+
+    def __init__(self, sys_params, fit_params, wd='.', outdir='out'):
+        self.sys_params = sys_params
+        self.fit_params = fit_params
+        self.wd = os.path.abspath(wd)
+        self.outdir = os.path.join(self.wd, outdir)
+        self.validate()
+        self.setup()
+        self.load_data()
+        self.load_saved()
+        self.set_priors()
+        
+    def validate(self):
+        
+        # set model defaults
+        for k,v in defaults['model'].items():
+            if k not in self.fit_params.keys():
+                print(f'setting default: {k} = {v}')
+                self.fit_params[k] = v
+        
+        # set sampler defaults
+        for k,v in defaults['sampler'].items():
+            if k not in self.fit_params.keys():
+                print(f'setting default: {k} = {v}')
+                self.fit_params[k] = v
+
+        # set data defaults
+        for k,v in defaults['data'].items():
+            for n in self.fit_params['data'].keys():
+                if k not in self.fit_params['data'][n].keys():
+                    print(f'setting default for {n}: {k} = {v}')
+                    self.fit_params['data'][n][k] = v
+
+    def setup(self):
+        fit_params = self.fit_params
+        # model settings
+        self.nplanets = len(fit_params['planets'])
+        self.fixed = fit_params['fixed']
+        self.fit_basis = fit_params['fit_basis']
+        self.planets = fit_params['planets']
+        self.chromatic = fit_params['chromatic']
+        self.include_mean = fit_params['include_mean']
+        self.use_gp = fit_params['use_gp']
+        self.unif = fit_params['unif']
+        self.unif_nsig = fit_params['unif_nsig']
+        # sampler settings
+        self.inferencedata = fit_params['inferencedata']
+        self.tune = fit_params['tune']
+        self.draws = fit_params['draws']
+        self.chains = fit_params['chains']
+        self.cores = fit_params['cores']
+        self.clobber = fit_params['clobber']
+        # initialize
+        self.model = None
+        self.trace = None
+        self.masks = {}
+        self.bands = []
+
+    def load_data(self):
+        self.data = {}
+        data = self.fit_params['data']
+        for n in data.keys():
+            fn = data[n]['file']
+            b = data[n]['band']
+            if b not in self.bands:
+                self.bands.append(b)
+            fp = os.path.join(self.wd, fn)
+            x, y, yerr, X, texp, x_hr, ref_time = io.read_generic(
+                fp, 
+                binsize=data[n]['binsize'],
+                spline=data[n]['spline'],
+                add_bias=data[n]['add_bias'],
+                quad=data[n]['quadratic'],
+                trend=data[n]['trend'],
+                trim_beg=data[n]['trim_beg'],
+                trim_end=data[n]['trim_end'],
+                chunk_offset=data[n]['chunk_offset'],
+                chunk_thresh=data[n]['chunk_thresh'],
+            )
+            data_iso = [Time(i+ref_time, format='jd').iso for i in (x.min(), x.max())]
+            print(f'loading data: {fn}')
+            print(f'data span: {data_iso[0]} - {data_iso[1]}')
+            print('ref. time:', ref_time)
+            nsig_clip = data[n]['nsig_clip']
+            self.data[n] = dict(x=x, y=y, yerr=yerr, X=X, texp=texp, x_hr=x_hr, band=b, ref_time=ref_time, nsig_clip=nsig_clip)
+            self.masks[n] = None
+        ref_times = [v['ref_time'] for k,v in self.data.items()]
+        self.ref_time = min(ref_times)
+        for k,v in self.data.items():
+            if v['ref_time'] != self.ref_time:
+                delta = v['ref_time'] - self.ref_time
+                v['x'] += delta
+                v['x_hr'] += delta
+                v['ref_time'] = self.ref_time
+
+    def load_saved(self):
+        if not os.path.exists(self.outdir):
+            os.mkdir(self.outdir)
+        if not self.clobber:
+            if os.path.exists(os.path.join(self.outdir, 'mask.pkl')):
+                print('loading mask(s) from mask.pkl')
+                self.masks = pickle.load(open(os.path.join(self.outdir, 'mask.pkl'), 'rb'))
+            if os.path.exists(os.path.join(self.outdir, 'model.pkl')):
+                print('loading model from model.pkl')
+                self.model = pickle.load(open(os.path.join(self.outdir, 'model.pkl'), 'rb'))
+            if os.path.exists(os.path.join(self.outdir, 'map.pkl')):
+                print('loading MAP solution from map.pkl')
+                self.map_soln = pickle.load(open(os.path.join(self.outdir, 'map.pkl'), 'rb'))
+            if os.path.exists(os.path.join(self.outdir, 'trace.pkl')):
+                print('loading trace from trace.pkl')
+                self.trace = pickle.load(open(os.path.join(self.outdir, 'trace.pkl'), 'rb'))
+
+    def plot_data(self):
+        print("plotting data")
+        for name,data in self.data.items():
+            x, y, yerr = [data.get(i) for i in 'x y yerr'.split()]
+            ref_time = data['ref_time']
+            plt.errorbar(x, y, yerr, ls='', label=name)
+            plt.xlabel(f"time [BJD$-${ref_time}]")
+            plt.ylabel("relative flux [ppt]")
+        fn = f'data.png'
+        plt.tight_layout()
+        plt.legend()
+        plt.savefig(os.path.join(self.outdir, fn))
+
+    def set_priors(self):
+        planets = [self.sys_params['planets'][k] for k in self.planets]
+        x_mean = np.mean([v['x'].mean() for k,v in self.data.items()])
+        tc_guess, tc_guess_unc = util.get_tc_prior(self.fit_params, x_mean, self.ref_time)
+        unif = self.unif
+        self.priors = util.get_priors(
+            self.fit_basis, self.sys_params['star'], 
+            planets, self.fixed, self.bands,
+            tc_guess, tc_guess_unc, unif=unif, unif_nsig=self.unif_nsig
+        )
+        
+    def build_model(self, start=None, force=False, verbose=False):
+        if force or self.clobber or self.model is None:
+            print('building and optimizing model')
+            data, priors, masks = self.data, self.priors, self.masks
+            nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
+            fixed, fit_basis, include_mean = self.fixed, self.fit_basis, self.include_mean
+            self.model, self.map_soln = model.build(
+                data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
+                masks=masks, start=start, include_mean=include_mean, verbose=verbose
+            )
+            print(self.model)
+            pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
+            pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
+        for name in self.data.keys():
+            fn = f'fit-{name}.png'
+            self.plot(name, fn=fn)
+        
+    def plot(self, name, fn=None):
+        data, mask, map_soln = self.data[name], self.masks[name], self.map_soln
+        nplanets, use_gp, trace = self.nplanets, self.use_gp, self.trace
+        plot.light_curve(
+            data, name, map_soln, nplanets, use_gp=use_gp, trace=trace, mask=mask,
+            pl_letters=self.fit_params['planets']
+        )
+        if fn is None:
+            fn = f'fit-{name}.png'
+        plt.tight_layout()
+        plt.subplots_adjust(hspace=0)
+        plt.savefig(os.path.join(self.outdir, fn))
+        
+    def clip_outliers(self, fn=None):
+        clipped = False
+        for name, data in self.data.items():
+            if self.clobber or self.masks[name] is None:
+                x, y = [data.get(i) for i in 'x y'.split()]
+                map_soln, use_gp = self.map_soln, self.use_gp, 
+                nsig_clip = self.data[name]['nsig_clip']
+                if fn is None:
+                    fn = f'{name}-outliers.png'
+                fp = os.path.join(self.outdir, fn)
+                self.masks[name] = util.get_outlier_mask(x, y, name, map_soln, use_gp, nsig=nsig_clip, fp=fp)
+                n_outliers = self.masks[name].size - self.masks[name].sum()
+                if n_outliers > 0:
+                    print(f'clipped {n_outliers} outlier(s)')
+                    clipped = True
+        pickle.dump(self.masks, open(os.path.join(self.outdir, 'mask.pkl'), 'wb'))
+        if clipped:
+            self.build_model(start=self.map_soln, force=True)
+            
+    def sample(self, fn=None):
+
+        if self.clobber or self.trace is None:
+            tune = self.tune
+            draws = self.draws
+            chains = self.chains
+            cores = self.cores
+            print(f'sampling for {tune} tuning steps and {draws} draws with {chains} chains on {cores} cores')
+            self.trace = model.sample(
+                self.model, 
+                self.map_soln,
+                tune=tune,
+                draws=draws,
+                chains=chains,
+                cores=cores,
+                inferencedata=self.inferencedata
+            )
+            pickle.dump(self.trace, open(os.path.join(self.outdir, 'trace.pkl'), 'wb'))
+
+        with self.model:
+            self.summary = util.get_summary(
+                self.trace, self.data, self.bands, self.fit_basis, self.use_gp, self.fixed,
+                chromatic=self.chromatic
+            )
+            print('r_hat max:', self.summary['r_hat'].max())
+            
+        self.summary.to_csv(os.path.join(self.outdir, 'summary.csv'))
+
+        soln, logp = util.get_map_soln(self.trace)
+        if logp > self.model.logp(self.map_soln):
+            self.map_soln = soln
+            pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
+            
+        for name in self.data.keys():
+            fn = f'fit-{name}.png'
+            self.plot(name, fn=fn)
+
+        for name, data in self.data.items():
+            y = data['y']
+            mask = self.masks[name]
+            map_soln = self.map_soln
+            use_gp = self.use_gp
+            resid = util.get_residuals(name, y, map_soln, mask=mask, use_gp=use_gp)
+            print(f"{name} residual scatter: {resid.std()*1e3 :.0f} ppm")
+        
+    def plot_corner(self, sigma_lc=True, fn=None):
+
+        print('generating corner plot')
+        fig = plot.corner(
+            self.trace,
+            self.map_soln,
+            self.priors,
+            self.use_gp,
+            self.fixed,
+            self.nplanets,
+            self.bands,
+            self.data,
+            self.chromatic,
+            sigma_lc=sigma_lc
+        )
+        if fn is None:
+            fn = 'corner.png'
+        plt.tight_layout()
+        fig.subplots_adjust(hspace=0.02, wspace=0.02)
+        plt.savefig(os.path.join(self.outdir, fn))
+
+    def plot_trace(self, fn=None):
+        
+        print('generating trace plot')
+        var_names = util.get_var_names(
+            self.data, self.bands, self.fit_basis, self.use_gp, self.fixed, self.chromatic
+        )
+        with self.model:
+            az.plot_trace(self.trace, var_names=var_names)
+        if fn is None:
+            fn = 'trace.png'
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.outdir, fn))
+        
+    def save_results(self):
+        print('saving results')
+        if self.inferencedata:
+            flat_samps = self.trace.posterior.stack(sample=("chain", "draw"))
+            t0_s = flat_samps['t0'].values
+        else:
+            t0_s = self.trace['t0']
+        with open(os.path.join(self.outdir, 'tc.txt'), 'w') as f:
+            if self.nplanets > 1:
+                for i in range(self.nplanets):
+                    f.write(f'{self.planets[i]} {t0_s[:,i].mean() + self.ref_time - 2454833} {t0_s[:,i].std()}\n')
+            else:
+                f.write(f'{self.planets[0]} {t0_s.mean() + self.ref_time - 2454833} {t0_s.std()}\n')
+            
+        if self.clobber:
+            pass
