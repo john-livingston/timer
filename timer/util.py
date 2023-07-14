@@ -19,22 +19,22 @@ def get_spline_basis(x, degree=3, knots=None, n_knots=5, include_intercept=False
         )
         spline_dm = np.asarray(dmatrix(dm_formula, {"x": x}))
     return spline_dm
-    
+
 def get_residuals(name, y, soln, mask=None, use_gp=False):
-    
+
     if mask is None:
         mask = np.ones(len(y), dtype=bool)
 
     mean = soln[f"{name}_mean"]
-    lin_mod = soln[f'{name}_lm']
+    lin_mod = soln[f'{name}_lm'] if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
     tra_mod = np.sum(soln[f"{name}_light_curves"], axis=-1)
-    
+
     sys_mod = lin_mod + mean
     if use_gp:
         gp_mod = soln[f"{name}_gp_pred"]
         sys_mod += gp_mod
-    
-    return y[mask] - tra_mod - sys_mod    
+
+    return y[mask] - tra_mod - sys_mod
 
 def get_map_soln(trace, inferencedata=False):
     if inferencedata:
@@ -48,12 +48,12 @@ def get_map_soln(trace, inferencedata=False):
         idx = trace.get_sampler_stats('model_logp').argmax()
         max_lp = trace.get_sampler_stats('model_logp')[idx]
         vals = [trace.get_values(vn)[idx] for vn in trace.varnames]
-        soln = dict(zip(trace.varnames, vals))        
+        soln = dict(zip(trace.varnames, vals))
     return soln, max_lp
 
 def get_var_names(data, bands, fit_basis, use_gp, fixed,
                   chromatic=False, log_sigma=True, weights=False):
-    
+
     var_names = ['t0']
     for par in 'period b dur'.split():
         if par not in fixed:
@@ -75,9 +75,9 @@ def get_var_names(data, bands, fit_basis, use_gp, fixed,
             var_names += [f'{name}_log_sigma_lc']
     return var_names
 
-def get_summary(trace, data, bands, fit_basis, use_gp, fixed, 
+def get_summary(trace, data, bands, fit_basis, use_gp, fixed,
                 chromatic=False, log_sigma=True, weights=False):
-    
+
     var_names = get_var_names(data, bands, fit_basis, use_gp, fixed,
                               chromatic=chromatic, log_sigma=log_sigma, weights=weights)
     summary = az.summary(
@@ -101,11 +101,11 @@ def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, fp=None):
 
     if fp is not None and mask.sum() < mask.size:
         plot_outliers(x, resid, mask, fp=fp)
-        
+
     return mask
 
 def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, unif=[], unif_nsig=10):
-    
+
     priors = {}
     priors['r_star'] = np.array(star['radius'][0])
     priors['r_star_unc'] = np.array(star['radius'][1])
@@ -118,7 +118,7 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
         raise NotImplementedError
     else:
         print("basis not supported")
-        
+
     bands_ = [f'{band}*' if band in 'griz' else band for band in bands]
     ldp = [ld.claret(band, *star['teff'], *star['logg'], *star['feh']) for band in bands_]
     priors['u_star'] = {band:ld[::2] for band,ld in zip(bands, ldp)}
@@ -134,15 +134,15 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
                 # assume gaussian
                 priors[f'{par}_prior'] = 'gaussian'
                 priors[f'{par}_unc'] = np.array([i[par][1] for i in planets])
-            
+
     priors['t0'] = tc_guess
     priors['t0_unc'] = tc_guess_unc
     priors['t0_prior'] = 'uniform'
-    
+
     return priors
 
 def get_tc_prior(fit_params, x, ref_time):
-    
+
     if 'tc_pred' in fit_params.keys():
         tc_guess = np.array(fit_params['tc_pred']) - ref_time
     elif 'tc_pred_iso' in fit_params.keys():
@@ -153,7 +153,7 @@ def get_tc_prior(fit_params, x, ref_time):
         tc_guess_unc = fit_params['tc_pred_unc']
     else:
         tc_guess_unc = 0.04
-        
+
     return np.atleast_1d(tc_guess), np.atleast_1d(tc_guess_unc)
 
 def bin_df(df, timecol='time', errcol='flux_err', binsize=60/86400., kind='median'):

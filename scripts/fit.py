@@ -20,6 +20,8 @@ fit_params = yaml.load(open(fp), Loader=yaml.FullLoader)
 if len(sys.argv) > 2:
     fp = sys.argv[2]
     sys_params = yaml.load(open(fp), Loader=yaml.FullLoader)
+elif os.path.isfile('sys.yaml'):
+    sys_params = yaml.load(open('sys.yaml'), Loader=yaml.FullLoader)
 else:
     fp = os.path.join(wd, 'sys.yaml')
     sys_params = yaml.load(open(fp), Loader=yaml.FullLoader)
