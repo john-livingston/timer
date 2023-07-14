@@ -7,7 +7,8 @@ plt.rcParams['figure.dpi'] = 150
 
 tick = time.time()
 
-proj_root = f'{os.environ["HOME"]}/github/timer'
+#proj_root = f'{os.environ["HOME"]}/github/timer'
+proj_root = f'{os.environ["HOME"]}/gitlab/timer'
 sys.path.append(proj_root)
 
 from timer.fit import TransitFit

@@ -92,6 +92,9 @@ def read_generic(
     texp = np.median(np.diff(x))
     x_hr = np.linspace(x.min(), x.max(), 500)
 
+    if X.shape[1] == 0:
+        X = None
+
     return x, y, yerr, X, texp, x_hr, ref_time
 
 # def read_afphpot_csv(

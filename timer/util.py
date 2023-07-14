@@ -90,8 +90,9 @@ def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, fp=None):
     mod = (
         + map_soln[f"{name}_mean"]
         + np.sum(map_soln[f"{name}_light_curves"], axis=-1)
-        + map_soln[f"{name}_lm"]
     )
+    if f"{name}_lm" in map_soln.keys():
+        mod += map_soln[f"{name}_lm"]
     if use_gp:
         mod += map_soln[f"{name}_gp_pred"]
     resid = y - mod
