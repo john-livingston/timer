@@ -5,6 +5,62 @@ import aesara_theano_fallback.tensor as tt
 import pymc3_ext as pmx
 from celerite2.theano import terms, GaussianProcess
 
+
+def aflare1(t, tpeak, fwhm, ampl, theano=True):
+    # adapted from: https://github.com/MNGuenther/allesfitter/blob/master/allesfitter/flares/aflare.py
+    '''
+    The Analytic Flare Model evaluated for a single-peak (classical).
+    Reference Davenport et al. (2014) http://arxiv.org/abs/1411.3723
+    Use this function for fitting classical flares with most curve_fit
+    tools.
+    Note: this model assumes the flux before the flare is zero centered
+    Parameters
+    ----------
+    t : 1-d array
+        The time array to evaluate the flare over
+    tpeak : float
+        The time of the flare peak
+    fwhm : float
+        The "Full Width at Half Maximum", timescale of the flare
+    ampl : float
+        The amplitude of the flare
+    Returns
+    -------
+    flare : 1-d array
+        The flux of the flare model evaluated at each time
+    '''
+
+    _fr = [1.00000, 1.94053, -0.175084, -2.24588, -1.12498]
+    _fd = [0.689008, -1.60053, 0.302963, -0.278318]
+    
+    if theano:
+        fun1 = lambda x: (  _fr[0]+                       # 0th order
+                            _fr[1]*((x-tpeak)/fwhm)+      # 1st order
+                            _fr[2]*((x-tpeak)/fwhm)**2.+  # 2nd order
+                            _fr[3]*((x-tpeak)/fwhm)**3.+  # 3rd order
+                            _fr[4]*((x-tpeak)/fwhm)**4. ) # 4th order
+        fun2 = lambda x: (  _fd[0]*tt.exp( ((x-tpeak)/fwhm)*_fd[1] ) +
+                            _fd[2]*tt.exp( ((x-tpeak)/fwhm)*_fd[3] ) )
+        part1 = tt.switch((t > tpeak-fwhm) & (t <= tpeak), fun1(t), 0)
+        part2 = tt.switch(t > tpeak, fun2(t), 0)
+        flare = part1 + part2
+    else:
+        fun1 = lambda x: (  _fr[0]+                       # 0th order
+                            _fr[1]*((x-tpeak)/fwhm)+      # 1st order
+                            _fr[2]*((x-tpeak)/fwhm)**2.+  # 2nd order
+                            _fr[3]*((x-tpeak)/fwhm)**3.+  # 3rd order
+                            _fr[4]*((x-tpeak)/fwhm)**4. ) # 4th order
+        fun2 = lambda x: (  _fd[0]*np.exp( ((x-tpeak)/fwhm)*_fd[1] ) +
+                            _fd[2]*np.exp( ((x-tpeak)/fwhm)*_fd[3] ) )
+        ix1 = (t > tpeak-fwhm) & (t <= tpeak) 
+        ix2 = t > tpeak
+        flare = np.zeros_like(t)
+        flare[ix1] = fun1(t[ix1])
+        flare[ix2] = fun2(t[ix2])
+
+    return flare * ampl
+
+
 def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None, 
            mu=None, sd=None, lower=None, upper=None, verbose=False, testval=None):
     if priors is not None:
@@ -73,6 +129,7 @@ def build(
     chromatic=False,
     use_gp=False,
     include_mean=True,
+    include_flare=False,
     fixed=[],
     verbose=False
 ):
@@ -115,6 +172,27 @@ def build(
                 v[p] = get_rv(key=p, priors=priors, shape=nplanets, verbose=verbose, bounded=bounded)
         elif basis == 'density':
             raise NotImplementedError
+
+        # flare parameters
+        if include_flare:
+            flare_tpeak = get_rv(
+                key='flare_tpeak',
+                priors=priors,
+                shape=1,
+                verbose=verbose
+            )
+            flare_fwhm = get_rv(
+                key='flare_fwhm',
+                priors=priors,
+                shape=1,
+                verbose=verbose
+            )
+            flare_ampl = get_rv(
+                key='flare_ampl',
+                priors=priors,
+                shape=1,
+                verbose=verbose
+            )
 
         # parameters for the planets
         for p in "t0 period ror b".split():
@@ -232,6 +310,12 @@ def build(
                 )
                 parameters[f'{name}_gp'] = [log_rho_gp, log_sigma_gp]
 
+            if include_flare:
+                flare = aflare1(x[mask], tpeak=flare_tpeak, fwhm=flare_fwhm, ampl=flare_ampl)
+                pm.Deterministic(f"{name}_flare", flare)
+            else:
+                flare = 0
+
             # Compute the model light curve
             if chromatic:
                 ror = v[f'ror_{band}']
@@ -242,7 +326,7 @@ def build(
                 * 1e3
             )
             pm.Deterministic(f"{name}_light_curves", light_curves)
-            light_curve = tt.sum(light_curves, axis=-1) + mean + lm
+            light_curve = tt.sum(light_curves, axis=-1) + mean + lm + flare
             resid = y[mask] - light_curve
 
             # Compute high-res model light curve

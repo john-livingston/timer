@@ -38,7 +38,7 @@ def plot_outliers(x, resid, mask, fp=None):
         plt.savefig(fp)
 
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
-           chromatic=False, sigma_lc=True, show_prior=True):
+           chromatic=False, sigma_lc=True, include_flare=False, show_prior=True):
 
     var_names = [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
     trace_ = trace['t0'].copy()
@@ -65,6 +65,12 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
     if sigma_lc:
         for name in data.keys():
             par = f'{name}_log_sigma_lc'
+            var_names += [par]
+            trace_ = np.c_[trace_, trace[par].copy()]
+            truths = np.append(truths, soln[par])
+    if include_flare:
+        for p in 'tpeak fwhm ampl'.split():
+            par = f'flare_{p}'
             var_names += [par]
             trace_ = np.c_[trace_, trace[par].copy()]
             truths = np.append(truths, soln[par])
@@ -127,7 +133,7 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
 
     return fig
 
-def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False, 
+def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False, include_flare=False,
                      figsize=(4,5), pl_letters='bcdefg', inferencedata=False, median=True):
 
     x, y, yerr, x_hr = [data.get(i) for i in 'x y yerr x_hr'.split()]
@@ -143,6 +149,7 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
             mean = 0
         lcjit = np.exp(soln[f'{name}_log_sigma_lc'])
         lin_mod = soln[f'{name}_lm'] if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
+        flare_mod = soln[f'{name}_flare'] if include_flare else 0
         tra_mod = np.sum(soln[f"{name}_light_curves"], axis=-1)
         tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=-1)
     else:
@@ -152,9 +159,10 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
             mean = 0
         lcjit = np.exp(np.median(trace[f'{name}_log_sigma_lc']))
         lin_mod = np.median(trace[f'{name}_lm'], axis=0) if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
+        flare_mod = np.median(trace[f'{name}_flare'], axis=0) if include_flare else 0
         tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=-1)
         tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=-1)
-    sys_mod = lin_mod + mean
+    sys_mod = lin_mod + flare_mod + mean
 
     if use_gp:
         if trace is None or not median:

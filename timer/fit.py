@@ -16,6 +16,7 @@ defaults = dict(
         fit_basis = 'duration',
         chromatic = False,
         include_mean = True,
+        include_flare = False,
         unif = ['t0'],
         unif_nsig = 10,
         use_gp = False,
@@ -87,9 +88,12 @@ class TransitFit:
         self.planets = fit_params['planets']
         self.chromatic = fit_params['chromatic']
         self.include_mean = fit_params['include_mean']
+        self.include_flare = fit_params['include_flare']
         self.use_gp = fit_params['use_gp']
         self.unif = fit_params['unif']
         self.unif_nsig = fit_params['unif_nsig']
+        if self.include_flare:
+            self.flare = self.fit_params['flare']
         # sampler settings
         self.inferencedata = fit_params['inferencedata']
         self.tune = fit_params['tune']
@@ -180,16 +184,26 @@ class TransitFit:
             planets, self.fixed, self.bands,
             tc_guess, tc_guess_unc, unif=unif, unif_nsig=self.unif_nsig
         )
-        
+        if self.include_flare:
+            # lower = min([self.data[k]['x'].min() for k in self.data.keys()])
+            # upper = max([self.data[k]['x'].max() for k in self.data.keys()])
+            for p in 'tpeak fwhm ampl'.split():
+                self.priors[f'flare_{p}'] = self.flare[p]
+                self.priors[f'flare_{p}_prior'] = self.flare[f'{p}_prior']
+                self.priors[f'flare_{p}_unc'] = self.flare[f'{p}_unc']
+            p = 'tpeak'
+            self.priors[f'flare_{p}'] = self.flare[p] - self.ref_time
+
     def build_model(self, start=None, force=False, verbose=False):
         if force or self.clobber or self.model is None:
             print('building and optimizing model')
             data, priors, masks = self.data, self.priors, self.masks
             nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
-            fixed, fit_basis, include_mean = self.fixed, self.fit_basis, self.include_mean
+            fixed, fit_basis = self.fixed, self.fit_basis
+            include_mean, include_flare = self.include_mean, self.include_flare
             self.model, self.map_soln = model.build(
                 data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
-                masks=masks, start=start, include_mean=include_mean, verbose=verbose
+                masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, verbose=verbose
             )
             print(self.model)
             pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
@@ -201,8 +215,9 @@ class TransitFit:
     def plot(self, name, fn=None):
         data, mask, map_soln = self.data[name], self.masks[name], self.map_soln
         nplanets, use_gp, trace = self.nplanets, self.use_gp, self.trace
+        include_flare = self.include_flare
         plot.light_curve(
-            data, name, map_soln, nplanets, use_gp=use_gp, trace=trace, mask=mask,
+            data, name, map_soln, nplanets, use_gp=use_gp, trace=trace, mask=mask, include_flare=include_flare,
             pl_letters=self.fit_params['planets']
         )
         if fn is None:
@@ -213,6 +228,7 @@ class TransitFit:
         
     def clip_outliers(self, fn=None):
         clipped = False
+        include_flare = self.include_flare
         for name, data in self.data.items():
             if self.clobber or self.masks[name] is None:
                 x, y = [data.get(i) for i in 'x y'.split()]
@@ -221,7 +237,10 @@ class TransitFit:
                 if fn is None:
                     fn = f'{name}-outliers.png'
                 fp = os.path.join(self.outdir, fn)
-                self.masks[name] = util.get_outlier_mask(x, y, name, map_soln, use_gp, nsig=nsig_clip, fp=fp)
+                self.masks[name] = util.get_outlier_mask(
+                    x, y, name, map_soln, use_gp, 
+                    nsig=nsig_clip, include_flare=include_flare, fp=fp
+                    )
                 n_outliers = self.masks[name].size - self.masks[name].sum()
                 if n_outliers > 0:
                     print(f'clipped {n_outliers} outlier(s)')
@@ -275,7 +294,7 @@ class TransitFit:
             resid = util.get_residuals(name, y, map_soln, mask=mask, use_gp=use_gp)
             print(f"{name} residual scatter: {resid.std()*1e3 :.0f} ppm")
         
-    def plot_corner(self, sigma_lc=True, fn=None):
+    def plot_corner(self, sigma_lc=True, include_flare=True, fn=None):
 
         print('generating corner plot')
         fig = plot.corner(
@@ -288,7 +307,8 @@ class TransitFit:
             self.bands,
             self.data,
             self.chromatic,
-            sigma_lc=sigma_lc
+            sigma_lc=sigma_lc,
+            include_flare=include_flare&self.include_flare
         )
         if fn is None:
             fn = 'corner.png'

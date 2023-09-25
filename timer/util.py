@@ -86,7 +86,7 @@ def get_summary(trace, data, bands, fit_basis, use_gp, fixed,
     )
     return summary
 
-def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, fp=None):
+def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, fp=None):
     mod = (
         + map_soln[f"{name}_mean"]
         + np.sum(map_soln[f"{name}_light_curves"], axis=-1)
@@ -95,6 +95,8 @@ def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, fp=None):
         mod += map_soln[f"{name}_lm"]
     if use_gp:
         mod += map_soln[f"{name}_gp_pred"]
+    if include_flare:
+        mod += map_soln[f'{name}_flare']
     resid = y - mod
     rms = np.sqrt(np.median(resid**2))
     mask = np.abs(resid) < nsig * rms
