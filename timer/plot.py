@@ -227,29 +227,35 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
 
 def spline(fit, name, style=1):
 
-    spline = fit.fit_params['data'][name]['spline']
-    nspline = 5 if spline else 0    
     trend = fit.fit_params['data'][name]['trend']
     ntrend = trend if trend else 0
+    spline = fit.fit_params['data'][name]['spline']
+    nspline = 5 if spline else 0    
+    bias = fit.fit_params['data'][name]['add_bias']
+    nbias = 1 if bias else 0
+
     x = fit.data[name]['x']
     X = fit.data[name]['X']
     mask = fit.masks[name]
+    if mask is None:
+        mask = np.ones(len(x), dtype=bool)
     w = fit.map_soln[f'{name}_weights']
-    covariates = not nspline == X.shape[1]
-    ncovariates = X.shape[1] - nspline - ntrend
+    covariates = not X.shape[1] == nspline + ntrend + nbias
+    ncovariates = X.shape[1] - ntrend - nspline - nbias
 
     x_ = x[mask]
     X_cov = X[mask,:ncovariates]
-    X_spl = X[mask,ncovariates:(ncovariates+nspline)]
     w_cov = w[:ncovariates]
-    w_spl = w[ncovariates:(ncovariates+nspline)]
+    X_tre = X[mask,ncovariates:(ncovariates+ntrend)]
+    w_tre = w[ncovariates:(ncovariates+ntrend)]
+    X_spl = X[mask,(ncovariates+ntrend):(ncovariates+ntrend+nspline)]
+    w_spl = w[(ncovariates+ntrend):(ncovariates+ntrend+nspline)]
 
     if style == 1:
 
-        if covariates and spline:
-            fig, axs = plt.subplots(2, 2, figsize=(6,6), sharex=True)
-        elif covariates or spline:
-            fig, axs = plt.subplots(2, 1, figsize=(3,6), sharex=True)
+        ncols = sum([covariates, (trend is not None), spline])
+        figsize = (3*ncols,6)
+        fig, axs = plt.subplots(2, ncols, figsize=figsize, sharex=True)
 
         def plot(axs, x, X, w, name):
             # axs[0].plot(x, X)
@@ -260,27 +266,42 @@ def spline(fit, name, style=1):
             plt.setp(axs[0], title=f'basis vectors: {name}')
             plt.setp(axs[1], title=f'linear combination: {name}')
             
-        if covariates and not spline:
+        if covariates and not spline and not trend:
             plot(axs, x_, X_cov, w_cov, 'covariates')
 
-        elif spline and not covariates:
+        elif spline and not covariates and not trend:
             plot(axs, x_, X_spl, w_spl, 'spline')
 
-        elif spline and covariates:
+        elif trend and not covariates and not spline:
+            plot(axs, x_, X_tre, w_tre, 'trend')
+
+        elif covariates and spline and not trend:
             plot(axs[:,0], x_, X_cov, w_cov, 'covariates')
             plot(axs[:,1], x_, X_spl, w_spl, 'spline')
+
+        elif covariates and trend and not spline:
+            plot(axs[:,0], x_, X_cov, w_cov, 'covariates')
+            plot(axs[:,1], x_, X_tre, w_tre, 'trend')
+
+        elif trend and spline and not covariates:
+            plot(axs[:,0], x_, X_tre, w_tre, 'trend')
+            plot(axs[:,1], x_, X_spl, w_spl, 'spline')
+
+        elif covariates and trend and spline:
+            plot(axs[:,0], x_, X_cov, w_cov, 'covariates')
+            plot(axs[:,1], x_, X_tre, w_tre, 'trend')
+            plot(axs[:,2], x_, X_spl, w_spl, 'spline')
 
         plt.setp(axs, xlabel='time', ylabel='flux')
         fig.tight_layout()
     
     elif style == 2:
 
-        if covariates and spline:
-            nax = 3
-            fig, axs = plt.subplots(1, 3, figsize=(9,3), sharex=True)
-        elif covariates or spline:
-            nax = 1
-            fig, ax = plt.subplots(1, 1, figsize=(3,3), sharex=True)
+        ncols = sum([covariates, (trend is not None), spline])
+        if ncols > 1:
+            ncols += 1 # add col for sum
+        figsize = (3*ncols,3)
+        fig, axs = plt.subplots(1, ncols, figsize=figsize, sharex=True)
 
         def plot(ax, x, X, w, name):
             for i,y in enumerate(X.T):
@@ -289,22 +310,37 @@ def spline(fit, name, style=1):
             ax.legend()
             plt.setp(ax, title=f'{name}')
 
-        if covariates and not spline:
-            plot(ax, x_, X_cov, w_cov, 'covariates')
-            
-        elif spline and not covariates:
-            plot(ax, x_, X_spl, w_spl, 'spline')
+        if covariates and not spline and not trend:
+            plot(axs, x_, X_cov, w_cov, 'covariates')
 
-        elif spline and covariates:
+        elif spline and not covariates and not trend:
+            plot(axs, x_, X_spl, w_spl, 'spline')
+
+        elif trend and not covariates and not spline:
+            plot(axs, x_, X_tre, w_tre, 'trend')
+
+        elif covariates and spline and not trend:
             plot(axs[0], x_, X_cov, w_cov, 'covariates')
             plot(axs[1], x_, X_spl, w_spl, 'spline')
-            axs[2].plot(x_, np.dot(X_cov,w_cov)+np.dot(X_spl,w_spl), color='k')
-            plt.setp(axs[2], title='sum')
 
-        if nax == 1:
-            plt.setp(ax, xlabel='time', ylabel='flux')
-        else:
-            plt.setp(axs, xlabel='time', ylabel='flux')
+        elif covariates and trend and not spline:
+            plot(axs[0], x_, X_cov, w_cov, 'covariates')
+            plot(axs[1], x_, X_tre, w_tre, 'trend')
+
+        elif trend and spline and not covariates:
+            plot(axs[0], x_, X_tre, w_tre, 'trend')
+            plot(axs[1], x_, X_spl, w_spl, 'spline')
+
+        elif covariates and trend and spline:
+            plot(axs[0], x_, X_cov, w_cov, 'covariates')
+            plot(axs[1], x_, X_tre, w_tre, 'trend')
+            plot(axs[2], x_, X_spl, w_spl, 'spline')
+
+        if ncols > 1:
+            axs[-1].plot(x_, np.dot(X,w), color='k')
+            plt.setp(axs[-1], title='sum')
+
+        plt.setp(axs, xlabel='time', ylabel='flux')
         fig.tight_layout()
 
     return fig

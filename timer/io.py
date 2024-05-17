@@ -26,7 +26,7 @@ def read_generic(
     if binsize is not None:
         df = bin_df(df, 'time', 'fluxerr', binsize=binsize)
     x, y, yerr = df.values[:,:3].T
-    X = df.values[:,3:]
+    X = df.values[:,3:] if df.shape[1]>3 else None # if no columns besides time, flux, flux_err
 
     # PROCESS TIME AND FLUX
     x += timeoffset
@@ -43,14 +43,16 @@ def read_generic(
     else:
         ref_time = 0
 
-    # INCLUDE QUADRATIC TERMS
-    if quad:
-        X = np.c_[X, X**2]
+    if X is not None:
 
-    # STANDARDIZE THE DESIGN MATRIX
-    X = (X - X.mean(axis=0)) / X.std(axis=0)
-    # X -= X.mean(axis=0)
-    # X /= X.std(axis=0)
+        # INCLUDE QUADRATIC TERMS
+        if quad:
+            X = np.c_[X, X**2]
+
+        # STANDARDIZE THE DESIGN MATRIX
+        X = (X - X.mean(axis=0)) / X.std(axis=0)
+        # X -= X.mean(axis=0)
+        # X /= X.std(axis=0)
 
     # ADD TREND/BIAS COLUMNS TO THE DESIGN MATRIX
     if trend is not None:
@@ -59,13 +61,22 @@ def read_generic(
         if not add_bias:
             # if we don't want to add a bias column, i.e. a column of ones
             A = A[:,:-1]
-        X = np.c_[X, A]
-    elif spline:
-        X = np.c_[X, get_spline_basis(x)]
-    elif add_bias:
+        if X is not None:
+            X = np.c_[X, A]
+        else:
+            X = A
+    if spline:
+        if X is not None:
+            X = np.c_[X, get_spline_basis(x)]
+        else:
+            X = get_spline_basis(x)
+    if add_bias:
         # if trend = None but we want to add a bias column (not needed if include_mean=True in model)
-        X = np.c_[X, np.ones_like(x)]
-
+        if X is not None:
+            X = np.c_[X, np.ones_like(x)]
+        else:
+            X = np.ones_like(x)[:,None]
+            
     # ADD CHUNK OFFSET COLUMNS TO THE DESIGN MATRIX TO ACCOUNT FOR DATA GAPS
     if chunk_offset:
         bkpts = list(np.where(np.diff(x) > chunk_thresh)[0]+1) + [x.shape[0]]

@@ -2,8 +2,8 @@ data:
   s25-1:
     file: TESS20200521.txt
     band: T
-    # spline: true
-    trend: 2
+    trend: 1
+    spline: true
 planets: b
 tc_pred: 2458990.82
 tc_pred_unc: 0.06
