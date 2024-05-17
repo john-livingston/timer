@@ -1,0 +1,26 @@
+data:
+  m3g:
+    file: V1298Taub_230730_muscat3_g_c123678_r20_mapping.txt
+    band: g
+    trend: 1
+    binsize: 0.00139 # 2 min
+  m3r:
+    file: V1298Taub_230730_muscat3_r_c3567_r20_mapping.txt
+    band: r
+    trend: 1
+    binsize: 0.00139 # 2 min
+  m3i:
+    file: V1298Taub_230730_muscat3_i_c35678_r20_mapping.txt
+    band: i
+    trend: 1
+    binsize: 0.00139 # 2 min
+  m3z:
+    file: V1298Taub_230730_muscat3_z_c3567_r20_mapping.txt
+    band: z
+    trend: 1
+    binsize: 0.00139 # 2 min
+planets: b
+tc_pred_iso: 2023-07-31 11:10
+tc_pred_unc: 0.08
+clobber: true
+cores: 1

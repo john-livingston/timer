@@ -194,7 +194,7 @@ class TransitFit:
             p = 'tpeak'
             self.priors[f'flare_{p}'] = self.flare[p] - self.ref_time
 
-    def build_model(self, start=None, force=False, verbose=False):
+    def build_model(self, start=None, force=False, verbose=False, plot=True):
         if force or self.clobber or self.model is None:
             print('building and optimizing model')
             data, priors, masks = self.data, self.priors, self.masks
@@ -208,9 +208,11 @@ class TransitFit:
             print(self.model)
             pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
             pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
-        for name in self.data.keys():
-            fn = f'fit-{name}.png'
-            self.plot(name, fn=fn)
+        # for name in self.data.keys():
+        #     fn = f'fit-{name}.png'
+        #     self.plot(name, fn=fn)
+        if plot:
+            self.plot_multi(fn='fit.png')
         
     def plot(self, name, fn=None):
         data, mask, map_soln = self.data[name], self.masks[name], self.map_soln
@@ -226,6 +228,40 @@ class TransitFit:
         plt.subplots_adjust(hspace=0)
         plt.savefig(os.path.join(self.outdir, fn))
         
+    def plot_multi(self, keys=None, figsize=None, despine=True, noticks=True, fn=None):
+        if keys is None:
+            keys = self.data.keys()
+        if figsize is None:
+            nds = len(keys)
+            figsize = (2*nds,4)
+
+        ncols = len(keys)
+        nrows = 3
+        fig, axes = plt.subplots(nrows, ncols, figsize=figsize, sharex='col', sharey='row')
+        if ncols == 1:
+            axes = axes[:,None]
+        for i,name in enumerate(keys):
+            data, mask, map_soln = self.data[name], self.masks[name], self.map_soln
+            nplanets, use_gp, trace = self.nplanets, self.use_gp, self.trace
+            include_flare = self.include_flare
+            plot.light_curve(
+                data, name, map_soln, nplanets, axes=axes[:,i], use_gp=use_gp, trace=trace, mask=mask, include_flare=include_flare,
+                pl_letters=self.fit_params['planets'], 
+            )
+            if i > 0:
+                plt.setp(axes[:,i], ylabel=None)
+                
+        if despine:
+            [plt.setp(ax.spines.right, visible=False) for ax in axes.flat]
+            [plt.setp(ax.spines.top, visible=False) for ax in axes.flat]
+        if noticks:
+            [ax.tick_params(length=0) for ax in axes.flat]
+
+        fig.subplots_adjust(hspace=0.1, wspace=0.15)
+        fig.align_ylabels()
+        if fn is not None:
+            plt.savefig(os.path.join(self.outdir, fn), dpi=300, bbox_inches='tight')
+
     def clip_outliers(self, fn=None):
         clipped = False
         include_flare = self.include_flare
@@ -249,7 +285,7 @@ class TransitFit:
         if clipped:
             self.build_model(start=self.map_soln, force=True)
             
-    def sample(self, fn=None):
+    def sample(self, fn=None, plot=True):
 
         if self.clobber or self.trace is None:
             tune = self.tune
@@ -282,9 +318,11 @@ class TransitFit:
             self.map_soln = soln
             pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
             
-        for name in self.data.keys():
-            fn = f'fit-{name}.png'
-            self.plot(name, fn=fn)
+        # for name in self.data.keys():
+        #     fn = f'fit-{name}.png'
+        #     self.plot(name, fn=fn)
+        if plot:
+            self.plot_multi(fn='fit.png')
 
         for name, data in self.data.items():
             y = data['y']

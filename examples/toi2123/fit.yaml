@@ -11,3 +11,4 @@ unif:
  - dur
  - b
 unif_nsig: 20
+cores: 1

@@ -134,7 +134,8 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
     return fig
 
 def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False, include_flare=False,
-                     figsize=(4,5), pl_letters='bcdefg', inferencedata=False, median=True):
+    axes=None, figsize=(3,4), pl_letters='bcdefg', inferencedata=False, median=True, annotate_dict={},
+    annotate_sigma=True):
 
     x, y, yerr, x_hr = [data.get(i) for i in 'x y yerr x_hr'.split()]
     if mask is None:
@@ -171,7 +172,10 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
             gp_mod = np.median(trace[f"{name}_gp_pred"], axis=0)
         sys_mod += gp_mod
 
-    fig, axes = plt.subplots(3, 1, figsize=figsize, sharex=True)
+    if axes is None:
+        fig, axes = plt.subplots(3, 1, figsize=figsize, sharex=True)
+    else:
+        fig = axes.flat[0].get_figure()
 
     ax = axes[0]
     ax.errorbar(x[mask], y[mask], yerr[mask], **data_kwargs)
@@ -179,7 +183,9 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
     ax.plot(x[mask], sys_mod, color=colors[1], label="systematics")
     ax.plot(x[mask], tra_mod+sys_mod, color=colors[2], label="systematics+transit")
 #    ax.legend(fontsize=10)
-    ax.set_ylabel("relative flux [ppt]")
+    ax.set_ylabel("relative flux\n[ppt]")
+    label = annotate_dict[name] if name in annotate_dict else name
+    annotate(ax, label, bold=True)
 
     ax = axes[1]
     ax.errorbar(x[mask], y[mask]-sys_mod, yerr[mask], **data_kwargs)
@@ -197,20 +203,25 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
         art.set_edgecolor("none")
     else:
         ax.plot(x_hr, tra_mod_hr, color=colors[0], label='transit')
-    ax.set_ylabel("de-trended flux [ppt]")
+    ax.set_ylabel("de-trended\n[ppt]")
 #    ax.legend(fontsize=10)
 
     ax = axes[2]
     ax.errorbar(x[mask], y[mask]-tra_mod-sys_mod, yerr[mask], **data_kwargs)
     ax.errorbar(x[mask], y[mask]-tra_mod-sys_mod, np.sqrt(yerr**2 + lcjit**2)[mask], alpha=0.5, **data_kwargs)
     ax.axhline(0, color="#aaaaaa", lw=1)
-    ax.set_ylabel("residuals [ppt]")
-    ax.set_xlim(x[mask].min(), x[mask].max())
-    ax.set_xlabel(f"time [BJD$-${data['ref_time']}]")
+    ax.set_ylabel("residuals\n[ppt]")
+    # ax.set_xlim(x[mask].min(), x[mask].max())
+    # ax.set_xlim(x[mask].min()-3/1440, x[mask].max()+3/1440)
+    ax.set_xlabel(f"BJD$-${data['ref_time']}")
     resid = y[mask] - tra_mod - sys_mod
-    annotate(ax, f"$\sigma$ = {resid.std()*1e3 :.0f} ppm")
+    if annotate_sigma:
+        # cadence = np.median(np.diff(x)) * 86400
+        # annotate(ax, f"$\sigma$ = {resid.std() :.1f} ppt / {cadence :.0f} sec")
+        annotate(ax, f"$\sigma$ = {resid.std() :.1f} ppt")
 
 #     fig.suptitle(name)
 #     axes[0].set_title(name)
     fig.subplots_adjust(hspace=0)
     return fig
+
