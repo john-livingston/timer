@@ -9,6 +9,7 @@ def read_generic(
     binsize=1/1440,
     timeoffset=0,
     spline=False,
+    spline_knots=5,
     add_bias=False,
     quad=False,
     trend=None,
@@ -67,16 +68,16 @@ def read_generic(
             X = A
     if spline:
         if X is not None:
-            X = np.c_[X, get_spline_basis(x)]
+            X = np.c_[X, get_spline_basis(x, n_knots=spline_knots)]
         else:
-            X = get_spline_basis(x)
+            X = get_spline_basis(x, n_knots=spline_knots)
     if add_bias:
         # if trend = None but we want to add a bias column (not needed if include_mean=True in model)
         if X is not None:
             X = np.c_[X, np.ones_like(x)]
         else:
             X = np.ones_like(x)[:,None]
-            
+
     # ADD CHUNK OFFSET COLUMNS TO THE DESIGN MATRIX TO ACCOUNT FOR DATA GAPS
     if chunk_offset:
         bkpts = list(np.where(np.diff(x) > chunk_thresh)[0]+1) + [x.shape[0]]

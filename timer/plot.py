@@ -230,7 +230,7 @@ def spline(fit, name, style=1):
     trend = fit.fit_params['data'][name]['trend']
     ntrend = trend if trend else 0
     spline = fit.fit_params['data'][name]['spline']
-    nspline = 5 if spline else 0    
+    nspline = fit.fit_params['data'][name]['spline_knots'] if spline else 0
     bias = fit.fit_params['data'][name]['add_bias']
     nbias = 1 if bias else 0
 
@@ -306,7 +306,7 @@ def spline(fit, name, style=1):
         def plot(ax, x, X, w, name):
             for i,y in enumerate(X.T):
                 ax.plot(x, y, label=f'w = {w[i] :.3f}')
-            ax.plot(x, np.dot(X,w), color='k', label=f'sum')
+            # ax.plot(x, np.dot(X,w), color='k', label=f'sum')
             ax.legend()
             plt.setp(ax, title=f'{name}')
 

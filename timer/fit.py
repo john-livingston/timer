@@ -33,6 +33,7 @@ defaults = dict(
 
     data = dict(
         spline = False,
+        spline_knots = 5,
         add_bias = False,
         quadratic = False,
         trend = None,
@@ -120,6 +121,7 @@ class TransitFit:
                 fp, 
                 binsize=data[n]['binsize'],
                 spline=data[n]['spline'],
+                spline_knots=data[n]['spline_knots'],
                 add_bias=data[n]['add_bias'],
                 quad=data[n]['quadratic'],
                 trend=data[n]['trend'],
@@ -228,7 +230,7 @@ class TransitFit:
         plt.subplots_adjust(hspace=0)
         plt.savefig(os.path.join(self.outdir, fn))
         
-    def plot_systematics(self, name, style=1, fn=None):
+    def plot_systematics(self, name, style=2, fn=None):
         
         fig = plot.spline(self, name, style=style)
         if fn is not None:

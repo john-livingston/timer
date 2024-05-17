@@ -4,6 +4,7 @@ data:
     band: T
     trend: 1
     spline: true
+    spline_knots: 10
 planets: b
 tc_pred: 2458990.82
 tc_pred_unc: 0.06
