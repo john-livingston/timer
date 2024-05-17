@@ -1,0 +1,29 @@
+data:
+  m2g:
+    file: V1298Tau-c_231202_muscat2_g_t3_c2_r26_mapping.txt
+    band: g
+#    trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+  m2r:
+    file: V1298Tau-c_231202_muscat2_r_t3_c125_r22_mapping.txt
+    band: r
+#    trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+  m2i:
+    file: V1298Tau-c_231202_muscat2_i_t3_c1257_r20_mapping.txt
+    band: i
+#    trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+  m2z:
+    file: V1298Tau-c_231202_muscat2_z_t3_c12_r22_mapping.txt
+    band: z
+#    trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+planets: c
+tc_pred_iso: 2023-12-02 22:56
+tc_pred_unc: 0.08
+cores: 1

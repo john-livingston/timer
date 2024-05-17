@@ -228,6 +228,12 @@ class TransitFit:
         plt.subplots_adjust(hspace=0)
         plt.savefig(os.path.join(self.outdir, fn))
         
+    def plot_systematics(self, name, style=1, fn=None):
+        
+        fig = plot.spline(self, name, style=style)
+        if fn is not None:
+            plt.savefig(os.path.join(self.outdir, fn), dpi=200, bbox_inches='tight')
+
     def plot_multi(self, keys=None, figsize=None, despine=True, noticks=True, fn=None):
         if keys is None:
             keys = self.data.keys()
@@ -250,7 +256,7 @@ class TransitFit:
             )
             if i > 0:
                 plt.setp(axes[:,i], ylabel=None)
-                
+
         if despine:
             [plt.setp(ax.spines.right, visible=False) for ax in axes.flat]
             [plt.setp(ax.spines.top, visible=False) for ax in axes.flat]
@@ -323,6 +329,8 @@ class TransitFit:
         #     self.plot(name, fn=fn)
         if plot:
             self.plot_multi(fn='fit.png')
+            for name in self.data.keys():
+                self.plot_systematics(name, fn=f'sys-{name}.png')
 
         for name, data in self.data.items():
             y = data['y']

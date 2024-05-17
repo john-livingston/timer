@@ -225,3 +225,86 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
     fig.subplots_adjust(hspace=0)
     return fig
 
+def spline(fit, name, style=1):
+
+    spline = fit.fit_params['data'][name]['spline']
+    nspline = 5 if spline else 0    
+    trend = fit.fit_params['data'][name]['trend']
+    ntrend = trend if trend else 0
+    x = fit.data[name]['x']
+    X = fit.data[name]['X']
+    mask = fit.masks[name]
+    w = fit.map_soln[f'{name}_weights']
+    covariates = not nspline == X.shape[1]
+    ncovariates = X.shape[1] - nspline - ntrend
+
+    x_ = x[mask]
+    X_cov = X[mask,:ncovariates]
+    X_spl = X[mask,ncovariates:(ncovariates+nspline)]
+    w_cov = w[:ncovariates]
+    w_spl = w[ncovariates:(ncovariates+nspline)]
+
+    if style == 1:
+
+        if covariates and spline:
+            fig, axs = plt.subplots(2, 2, figsize=(6,6), sharex=True)
+        elif covariates or spline:
+            fig, axs = plt.subplots(2, 1, figsize=(3,6), sharex=True)
+
+        def plot(axs, x, X, w, name):
+            # axs[0].plot(x, X)
+            for i,y in enumerate(X.T):
+                axs[0].plot(x, y, label=f'w = {w[i] :.3f}')
+            axs[0].legend()
+            axs[1].plot(x, np.dot(X,w), color='k')
+            plt.setp(axs[0], title=f'basis vectors: {name}')
+            plt.setp(axs[1], title=f'linear combination: {name}')
+            
+        if covariates and not spline:
+            plot(axs, x_, X_cov, w_cov, 'covariates')
+
+        elif spline and not covariates:
+            plot(axs, x_, X_spl, w_spl, 'spline')
+
+        elif spline and covariates:
+            plot(axs[:,0], x_, X_cov, w_cov, 'covariates')
+            plot(axs[:,1], x_, X_spl, w_spl, 'spline')
+
+        plt.setp(axs, xlabel='time', ylabel='flux')
+        fig.tight_layout()
+    
+    elif style == 2:
+
+        if covariates and spline:
+            nax = 3
+            fig, axs = plt.subplots(1, 3, figsize=(9,3), sharex=True)
+        elif covariates or spline:
+            nax = 1
+            fig, ax = plt.subplots(1, 1, figsize=(3,3), sharex=True)
+
+        def plot(ax, x, X, w, name):
+            for i,y in enumerate(X.T):
+                ax.plot(x, y, label=f'w = {w[i] :.3f}')
+            ax.plot(x, np.dot(X,w), color='k', label=f'sum')
+            ax.legend()
+            plt.setp(ax, title=f'{name}')
+
+        if covariates and not spline:
+            plot(ax, x_, X_cov, w_cov, 'covariates')
+            
+        elif spline and not covariates:
+            plot(ax, x_, X_spl, w_spl, 'spline')
+
+        elif spline and covariates:
+            plot(axs[0], x_, X_cov, w_cov, 'covariates')
+            plot(axs[1], x_, X_spl, w_spl, 'spline')
+            axs[2].plot(x_, np.dot(X_cov,w_cov)+np.dot(X_spl,w_spl), color='k')
+            plt.setp(axs[2], title='sum')
+
+        if nax == 1:
+            plt.setp(ax, xlabel='time', ylabel='flux')
+        else:
+            plt.setp(axs, xlabel='time', ylabel='flux')
+        fig.tight_layout()
+
+    return fig
