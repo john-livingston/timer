@@ -38,7 +38,7 @@ def plot_outliers(x, resid, mask, fp=None):
         plt.savefig(fp)
 
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
-           chromatic=False, sigma_lc=True, include_flare=False, show_prior=True):
+           chromatic=False, sigma_lc=True, include_flare=False, include_bump=False, show_prior=True):
 
     var_names = [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
     trace_ = trace['t0'].copy()
@@ -71,6 +71,12 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
     if include_flare:
         for p in 'tpeak fwhm ampl'.split():
             par = f'flare_{p}'
+            var_names += [par]
+            trace_ = np.c_[trace_, trace[par].copy()]
+            truths = np.append(truths, soln[par])
+    if include_bump:
+        for p in 'tcenter width ampl'.split():
+            par = f'bump_{p}'
             var_names += [par]
             trace_ = np.c_[trace_, trace[par].copy()]
             truths = np.append(truths, soln[par])
@@ -133,7 +139,8 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
 
     return fig
 
-def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False, include_flare=False,
+def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False, 
+    include_flare=False, include_bump=False,
     axes=None, figsize=(3,4), pl_letters='bcdefg', inferencedata=False, median=True, annotate_dict={},
     annotate_sigma=True):
 
@@ -151,6 +158,7 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
         lcjit = np.exp(soln[f'{name}_log_sigma_lc'])
         lin_mod = soln[f'{name}_lm'] if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
         flare_mod = soln[f'{name}_flare'] if include_flare else 0
+        bump_mod = soln[f'{name}_bump'] if include_bump else 0
         tra_mod = np.sum(soln[f"{name}_light_curves"], axis=-1)
         tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=-1)
     else:
@@ -161,9 +169,10 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
         lcjit = np.exp(np.median(trace[f'{name}_log_sigma_lc']))
         lin_mod = np.median(trace[f'{name}_lm'], axis=0) if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
         flare_mod = np.median(trace[f'{name}_flare'], axis=0) if include_flare else 0
+        bump_mod = np.median(trace[f'{name}_bump'], axis=0) if include_bump else 0
         tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=-1)
         tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=-1)
-    sys_mod = lin_mod + flare_mod + mean
+    sys_mod = lin_mod + flare_mod + bump_mod + mean
 
     if use_gp:
         if trace is None or not median:
@@ -244,11 +253,12 @@ def spline(fit, name, style=1):
     ncovariates = X.shape[1] - ntrend - nspline - nbias
 
     x_ = x[mask]
-    X_cov = X[mask,:ncovariates]
+    X_ = X[mask]
+    X_cov = X_[:,:ncovariates]
     w_cov = w[:ncovariates]
-    X_tre = X[mask,ncovariates:(ncovariates+ntrend)]
+    X_tre = X_[:,ncovariates:(ncovariates+ntrend)]
     w_tre = w[ncovariates:(ncovariates+ntrend)]
-    X_spl = X[mask,(ncovariates+ntrend):(ncovariates+ntrend+nspline)]
+    X_spl = X_[:,(ncovariates+ntrend):(ncovariates+ntrend+nspline)]
     w_spl = w[(ncovariates+ntrend):(ncovariates+ntrend+nspline)]
 
     if style == 1:
@@ -336,8 +346,11 @@ def spline(fit, name, style=1):
             plot(axs[1], x_, X_tre, w_tre, 'trend')
             plot(axs[2], x_, X_spl, w_spl, 'spline')
 
+        # if ncols > 1:
+        #     axs[-1].plot(x_, np.dot(X,w), color='k')
+        #     plt.setp(axs[-1], title='sum')
         if ncols > 1:
-            axs[-1].plot(x_, np.dot(X,w), color='k')
+            axs[-1].plot(x_, np.dot(X_, w), color='k')
             plt.setp(axs[-1], title='sum')
 
         plt.setp(axs, xlabel='time', ylabel='flux')

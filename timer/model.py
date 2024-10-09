@@ -6,6 +6,40 @@ import pymc3_ext as pmx
 from celerite2.theano import terms, GaussianProcess
 
 
+def bump_model(t, t_center, width, amplitude, theano=True):
+    """
+    Model a "bump" in a light curve using a simple exponential profile.
+    This could be used to model phenomena like spot-crossing during a transit.
+
+    Parameters:
+    -----------
+    t : array-like
+        The time array to evaluate the bump over
+    t_center : float
+        The time at the center of the bump
+    width : float
+        The width of the bump (similar to standard deviation in a Gaussian)
+    amplitude : float
+        The amplitude of the bump
+    theano : bool, optional
+        If True, use Theano tensors for compatibility with PyMC3 (default is True)
+
+    Returns:
+    --------
+    bump : array-like
+        The flux of the bump model evaluated at each time point
+    """
+    
+    if theano:
+        # Use Theano tensors for PyMC3 compatibility
+        bump = amplitude * tt.exp(-(t - t_center)**2 / (2 * width**2))
+    else:
+        # Use NumPy for standard Python calculations
+        bump = amplitude * np.exp(-(t - t_center)**2 / (2 * width**2))
+    
+    return bump
+
+
 def aflare1(t, tpeak, fwhm, ampl, theano=True):
     # adapted from: https://github.com/MNGuenther/allesfitter/blob/master/allesfitter/flares/aflare.py
     '''
@@ -130,6 +164,7 @@ def build(
     use_gp=False,
     include_mean=True,
     include_flare=False,
+    include_bump=False,
     fixed=[],
     verbose=False
 ):
@@ -189,6 +224,27 @@ def build(
             )
             flare_ampl = get_rv(
                 key='flare_ampl',
+                priors=priors,
+                shape=1,
+                verbose=verbose
+            )
+
+        # bump parameters
+        if include_bump:
+            bump_tcenter = get_rv(
+                key='bump_tcenter',
+                priors=priors,
+                shape=1,
+                verbose=verbose
+            )
+            bump_width = get_rv(
+                key='bump_width',
+                priors=priors,
+                shape=1,
+                verbose=verbose
+            )
+            bump_ampl = get_rv(
+                key='bump_ampl',
                 priors=priors,
                 shape=1,
                 verbose=verbose
@@ -316,6 +372,12 @@ def build(
             else:
                 flare = 0
 
+            if include_bump:
+                bump = bump_model(x[mask], t_center=bump_tcenter, width=bump_width, amplitude=bump_ampl)
+                pm.Deterministic(f"{name}_bump", bump)
+            else:
+                bump = 0
+
             # Compute the model light curve
             if chromatic:
                 ror = v[f'ror_{band}']
@@ -326,7 +388,7 @@ def build(
                 * 1e3
             )
             pm.Deterministic(f"{name}_light_curves", light_curves)
-            light_curve = tt.sum(light_curves, axis=-1) + mean + lm + flare
+            light_curve = tt.sum(light_curves, axis=-1) + mean + lm + flare + bump
             resid = y[mask] - light_curve
 
             # Compute high-res model light curve

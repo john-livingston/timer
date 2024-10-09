@@ -17,6 +17,7 @@ defaults = dict(
         chromatic = False,
         include_mean = True,
         include_flare = False,
+        include_bump = False,
         unif = ['t0'],
         unif_nsig = 10,
         use_gp = False,
@@ -90,11 +91,14 @@ class TransitFit:
         self.chromatic = fit_params['chromatic']
         self.include_mean = fit_params['include_mean']
         self.include_flare = fit_params['include_flare']
+        self.include_bump = fit_params['include_bump']
         self.use_gp = fit_params['use_gp']
         self.unif = fit_params['unif']
         self.unif_nsig = fit_params['unif_nsig']
         if self.include_flare:
             self.flare = self.fit_params['flare']
+        if self.include_bump:
+            self.bump = self.fit_params['bump']
         # sampler settings
         self.inferencedata = fit_params['inferencedata']
         self.tune = fit_params['tune']
@@ -195,6 +199,13 @@ class TransitFit:
                 self.priors[f'flare_{p}_unc'] = self.flare[f'{p}_unc']
             p = 'tpeak'
             self.priors[f'flare_{p}'] = self.flare[p] - self.ref_time
+        if self.include_bump:
+            for p in 'tcenter width ampl'.split():
+                self.priors[f'bump_{p}'] = self.bump[p]
+                self.priors[f'bump_{p}_prior'] = self.bump[f'{p}_prior']
+                self.priors[f'bump_{p}_unc'] = self.bump[f'{p}_unc']
+            p = 'tcenter'
+            self.priors[f'bump_{p}'] = self.bump[p] - self.ref_time
 
     def build_model(self, start=None, force=False, verbose=False, plot=True):
         if force or self.clobber or self.model is None:
@@ -202,10 +213,11 @@ class TransitFit:
             data, priors, masks = self.data, self.priors, self.masks
             nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
             fixed, fit_basis = self.fixed, self.fit_basis
-            include_mean, include_flare = self.include_mean, self.include_flare
+            include_mean, include_flare, include_bump = self.include_mean, self.include_flare, self.include_bump
             self.model, self.map_soln = model.build(
                 data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
-                masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, verbose=verbose
+                masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, include_bump=include_bump,
+                verbose=verbose
             )
             print(self.model)
             pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
@@ -220,8 +232,10 @@ class TransitFit:
         data, mask, map_soln = self.data[name], self.masks[name], self.map_soln
         nplanets, use_gp, trace = self.nplanets, self.use_gp, self.trace
         include_flare = self.include_flare
+        include_bump = self.include_bump
         plot.light_curve(
-            data, name, map_soln, nplanets, use_gp=use_gp, trace=trace, mask=mask, include_flare=include_flare,
+            data, name, map_soln, nplanets, use_gp=use_gp, trace=trace, mask=mask, 
+            include_flare=include_flare, include_bump=include_bump,
             pl_letters=self.fit_params['planets']
         )
         if fn is None:
@@ -252,8 +266,9 @@ class TransitFit:
             data, mask, map_soln = self.data[name], self.masks[name], self.map_soln
             nplanets, use_gp, trace = self.nplanets, self.use_gp, self.trace
             include_flare = self.include_flare
+            include_bump = self.include_bump
             plot.light_curve(
-                data, name, map_soln, nplanets, axes=axes[:,i], use_gp=use_gp, trace=trace, mask=mask, include_flare=include_flare,
+                data, name, map_soln, nplanets, axes=axes[:,i], use_gp=use_gp, trace=trace, mask=mask, include_flare=include_flare, include_bump=include_bump,
                 pl_letters=self.fit_params['planets'], 
             )
             if i > 0:
@@ -273,6 +288,7 @@ class TransitFit:
     def clip_outliers(self, fn=None):
         clipped = False
         include_flare = self.include_flare
+        include_bump = self.include_bump
         for name, data in self.data.items():
             if self.clobber or self.masks[name] is None:
                 x, y = [data.get(i) for i in 'x y'.split()]
@@ -283,7 +299,7 @@ class TransitFit:
                 fp = os.path.join(self.outdir, fn)
                 self.masks[name] = util.get_outlier_mask(
                     x, y, name, map_soln, use_gp, 
-                    nsig=nsig_clip, include_flare=include_flare, fp=fp
+                    nsig=nsig_clip, include_flare=include_flare, include_bump=include_bump, fp=fp
                     )
                 n_outliers = self.masks[name].size - self.masks[name].sum()
                 if n_outliers > 0:
@@ -293,7 +309,7 @@ class TransitFit:
         if clipped:
             self.build_model(start=self.map_soln, force=True)
             
-    def sample(self, fn=None, plot=True):
+    def sample(self, fn=None, plot_fit=True, plot_systematics=True):
 
         if self.clobber or self.trace is None:
             tune = self.tune
@@ -329,8 +345,9 @@ class TransitFit:
         # for name in self.data.keys():
         #     fn = f'fit-{name}.png'
         #     self.plot(name, fn=fn)
-        if plot:
+        if plot_fit:
             self.plot_multi(fn='fit.png')
+        if plot_systematics:
             for name in self.data.keys():
                 self.plot_systematics(name, fn=f'sys-{name}.png')
 
@@ -342,7 +359,7 @@ class TransitFit:
             resid = util.get_residuals(name, y, map_soln, mask=mask, use_gp=use_gp)
             print(f"{name} residual scatter: {resid.std()*1e3 :.0f} ppm")
         
-    def plot_corner(self, sigma_lc=True, include_flare=True, fn=None):
+    def plot_corner(self, sigma_lc=True, include_flare=True, include_bump=True, fn=None):
 
         print('generating corner plot')
         fig = plot.corner(
@@ -356,7 +373,8 @@ class TransitFit:
             self.data,
             self.chromatic,
             sigma_lc=sigma_lc,
-            include_flare=include_flare&self.include_flare
+            include_flare=include_flare&self.include_flare,
+            include_bump=include_bump&self.include_bump
         )
         if fn is None:
             fn = 'corner.png'
