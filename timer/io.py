@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 
@@ -18,12 +19,16 @@ def read_generic(
     subtract_reftime=True,
     chunk_offset=False,
     chunk_thresh=0.02,
+    verbose=True
 ):
 
     # READ DATA
     ncols = len(open(fp).readline().split())
     names = 'time flux fluxerr'.split() + [f'c{i}' for i in range(ncols-3)]
     df = pd.read_csv(fp, delim_whitespace=True, names=names)
+    if verbose:
+        print(f'\nreading: {os.path.basename(fp)}')
+        print(f'cadence: {np.median(np.diff(df.time.values))*86400 :.1f} seconds')
     if binsize is not None:
         df = bin_df(df, 'time', 'fluxerr', binsize=binsize)
     x, y, yerr = df.values[:,:3].T

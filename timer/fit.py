@@ -137,7 +137,7 @@ class TransitFit:
             data_iso = [Time(i+ref_time, format='jd').iso for i in (x.min(), x.max())]
             print(f'loading data: {fn}')
             print(f'data span: {data_iso[0]} - {data_iso[1]}')
-            print('ref. time:', ref_time)
+            print(f'ref. time: {ref_time}')
             nsig_clip = data[n]['nsig_clip']
             self.data[n] = dict(x=x, y=y, yerr=yerr, X=X, texp=texp, x_hr=x_hr, band=b, ref_time=ref_time, nsig_clip=nsig_clip)
             self.masks[n] = None
