@@ -243,6 +243,13 @@ class TransitFit:
         plt.tight_layout()
         plt.subplots_adjust(hspace=0)
         plt.savefig(os.path.join(self.outdir, fn))
+
+    def get_ic(self, ic='BIC', verbose=False):
+        map_soln = self.map_soln
+        max_logp = self.model.logp(map_soln)
+        nparams = sum([rv.dsize for rv in self.model.free_RVs])
+        ndata = sum([len(v['x']) for v in self.data.values()])
+        return util.compute_ic(map_soln, max_logp, nparams, ndata, method=ic, verbose=verbose)
         
     def plot_systematics(self, name, style=2, fn=None):
         
