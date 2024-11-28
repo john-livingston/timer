@@ -408,6 +408,13 @@ class TransitFit:
                     f.write(f'{self.planets[i]} {t0_s[:,i].mean() + self.ref_time - 2454833} {t0_s[:,i].std()}\n')
             else:
                 f.write(f'{self.planets[0]} {t0_s.mean() + self.ref_time - 2454833} {t0_s.std()}\n')
-            
+        with open(os.path.join(self.outdir, 'ic.txt'), 'w') as f:
+            map_soln = self.map_soln
+            max_logp = self.model.logp(map_soln)
+            nparams = len(self.model.free_RVs)
+            ndata = sum([len(v['x']) for v in self.data.values()])
+            ics = 'BIC AIC AICc'.split()
+            for ic in ics:
+                f.write(f'{ic} {util.compute_ic(map_soln, max_logp, nparams, ndata, method=ic, verbose=False)}\n')
         if self.clobber:
             pass

@@ -177,3 +177,21 @@ def bin_df(df, timecol='time', errcol='flux_err', binsize=60/86400., kind='media
     yerr_binned = groups.median()[errcol] / np.sqrt(groups.size())
     df_binned[errcol] = yerr_binned
     return df_binned.dropna()
+
+def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
+
+    if method == 'BIC':
+        ic = -2 * max_logp + nparams * np.log(ndata)
+    elif method == 'AIC':
+        ic = 2 * nparams - max_logp
+    elif method == 'AICc':
+        ic = 2 * nparams - max_logp
+        ic += 2 * (nparams**2 + nparams) / (ndata - nparams - 1)
+
+    if verbose:
+        print('Number of datapoints: {}'.format(ndata))
+        print('Number of parameters: {}'.format(nparams))
+        print('Max logp = {}'.format(max_logp))
+        print('{} = {}'.format(method, ic))
+
+    return ic
