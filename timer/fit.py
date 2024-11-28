@@ -411,7 +411,7 @@ class TransitFit:
         with open(os.path.join(self.outdir, 'ic.txt'), 'w') as f:
             map_soln = self.map_soln
             max_logp = self.model.logp(map_soln)
-            nparams = len(self.model.free_RVs)
+            nparams = sum([rv.dsize for rv in self.model.free_RVs])
             ndata = sum([len(v['x']) for v in self.data.values()])
             ics = 'BIC AIC AICc'.split()
             for ic in ics:
