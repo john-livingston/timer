@@ -2,9 +2,14 @@ import numpy as np
 import exoplanet as xo
 import pymc3 as pm
 import aesara_theano_fallback.tensor as tt
-import pymc3_ext as pmx
 from celerite2.theano import terms, GaussianProcess
 
+use_pymc3_ext = True
+try:
+    import pymc3_ext as pmx
+except:
+    print("not using pymc3-ext (using pm.find_MAP instead of pmx.optimize)")
+    use_pymc3_ext = False
 
 def bump_model(t, t_center, width, amplitude, theano=True):
     """
@@ -435,7 +440,10 @@ def build(
         if start is None:
             start = model.test_point
         # all
-        map_soln = pmx.optimize(start=start)
+        if use_pymc3_ext:
+            map_soln = pmx.optimize(start=start)
+        else:
+            map_soln = pm.find_MAP(start=start)
 
 #         # lm
 #         map_soln = pmx.optimize(
