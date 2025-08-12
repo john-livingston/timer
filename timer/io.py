@@ -19,20 +19,30 @@ def read_generic(
     subtract_reftime=True,
     chunk_offset=False,
     chunk_thresh=0.02,
+    timecol='time',
+    fluxcol='flux',
+    errcol='fluxerr',
     verbose=True
 ):
 
     # READ DATA
-    ncols = len(open(fp).readline().split())
-    names = 'time flux fluxerr'.split() + [f'c{i}' for i in range(ncols-3)]
-    df = pd.read_csv(fp, sep='\s+', names=names)
+    if fp.endswith('.txt'):
+        ncols = len(open(fp).readline().split())
+        names = 'time flux fluxerr'.split() + [f'c{i}' for i in range(ncols-3)]
+        df = pd.read_csv(fp, sep='\s+', names=names)
+    elif fp.endswith('.csv'):
+        df = pd.read_csv(fp)
+    else:
+        raise ValueError("file type not recognized, must be .txt or .csv")
+
     if verbose:
         print(f'\nreading: {os.path.basename(fp)}')
-        print(f'cadence: {np.median(np.diff(df.time.values))*86400 :.1f} seconds')
+        print(f'cadence: {np.median(np.diff(df[timecol].values))*86400 :.1f} seconds')
     if binsize is not None:
-        df = bin_df(df, 'time', 'fluxerr', binsize=binsize)
-    x, y, yerr = df.values[:,:3].T
-    X = df.values[:,3:] if df.shape[1]>3 else None # if no columns besides time, flux, flux_err
+        df = bin_df(df, timecol, errcol, binsize=binsize)
+    x, y, yerr = df[[timecol, fluxcol, errcol]].values.T
+    aux_cols = [c for c in df.columns if c not in [timecol, fluxcol, errcol]]
+    X = df[aux_cols].values if len(aux_cols) > 0 else None
 
     # PROCESS TIME AND FLUX
     x += timeoffset
@@ -114,73 +124,43 @@ def read_generic(
 
     return x, y, yerr, X, texp, x_hr, ref_time
 
-# def read_afphpot_csv(
-#     fp,
-#     ds,
-#     timecol = 'BJD_TDB',
-#     fluxcol = 'Flux',
-#     errcol = 'Err',
-#     auxcols = 'Airmass,DX(pix),DY(pix),FWHM(pix),Peak(ADU)'.split(','),
-#     binsize = 1/1440,
-#     timeoffset = 0,
-#     trend = False,
-#     quad = False,
-#     clip_beg=None,
-#     clip_end=None,
-#     add_bias=True,
-#     subtract_reftime=True
-# ):
+def read_afphpot_csv(
+    fp, 
+    binsize=1/1440,
+    timeoffset=0,
+    spline=False,
+    spline_knots=5,
+    add_bias=False,
+    quad=False,
+    trend=None,
+    trim_beg=None,
+    trim_end=None,
+    subtract_reftime=True,
+    chunk_offset=False,
+    chunk_thresh=0.02,
+    timecol='time',
+    fluxcol='flux',
+    errcol='fluxerr',
+    verbose=True
+)
 
-#     # READ AND BIN DATA
-#     df = pd.read_csv(fp)
-#     df = bin_df(df, timecol, errcol, binsize=binsize)
+    return read_generic(
+        fp,
+        binsize=binsize
+        timeoffset=timeoffset,
+        spline=spline,
+        spline_knots=spline_knots,
+        add_bias=add_bias,
+        quad=quad,
+        trend=trend,
+        trim_beg=trim_beg,
+        trim_end=trim_end,
+        subtract_reftime=subtract_reftime,
+        chunk_offset=chunk_offset,
+        chunk_thresh=chunk_thresh,
+        timecol='BJD_TDB',
+        fluxcol='Flux',
+        errcol='Err',
+        verbose=verbose
 
-#     # EXTRACT AND PROCESS THE TIME AND FLUX
-#     x, y, yerr = df[[timecol,fluxcol,errcol]].values.T
-#     x += timeoffset
-#     yerr /= y
-#     y = (y / np.median(y) - 1)
-#     y *= 1e3
-#     yerr *= 1e3
-
-#     # SUBTRACT A REFERENCE TIME
-#     if subtract_reftime:
-#         ref_time = x.min()
-#         x -= ref_time
-#     else:
-#         ref_time = 0
-
-#     # EXTRACT AUXILIARY BASIS VECTORS FOR DETRENDING
-#     # cols = ['airmass']
-#     X = df[auxcols].values
-
-#     # INCLUDE QUADRATIC TERMS
-#     if quad:
-#         X = np.c_[X, X**2]
-
-#     # STANDARDIZE THE DESIGN MATRIX
-#     X = (X - X.mean(axis=0)) / X.std(axis=0)
-#     # X -= X.mean(axis=0)
-#     # X /= X.std(axis=0)
-
-#     # IF INCLUDING A TREND, ADD COLUMNS TO THE DESIGN MATRIX
-#     if trend:
-#         A = np.vander(x - 0.5*(x.min() + x.max()), 2)
-#         if not add_bias:
-#             A = A[:,:-1]
-#         X = np.c_[X, A[:,0]]
-
-#     # DISCARD BAD DATA (HIGH AIRMASS) AT THE BEGINNING OF THE TIME SERIES
-#     if clip_beg is not None:
-#         ix = x > clip_beg
-#         x, y, yerr, X = x[ix], y[ix], yerr[ix], X[ix]
-
-#     if clip_end is not None:
-#         ix = x < x.max()-clip_end
-#         x, y, yerr, X = x[ix], y[ix], yerr[ix], X[ix]
-
-#     # COMPUTE APPROXIMATE EXPOSURE TIME
-#     texp = np.median(np.diff(x))
-#     x_hr = np.linspace(x.min(), x.max(), 500)
-
-#     return x, y, yerr, X, texp, x_hr, ref_time
+    )

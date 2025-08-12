@@ -3,8 +3,6 @@ import exoplanet as xo
 import pymc as pm
 import pytensor.tensor as pt
 
-use_pymc3_ext = False
-
 def bump_model(t, t_center, width, amplitude, theano=True):
     """
     Model a "bump" in a light curve using a simple exponential profile.

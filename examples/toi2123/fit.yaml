@@ -1,6 +1,6 @@
 data:
   s25-1:
-    file: TESS20200521.txt
+    file: TESS20200521.csv
     band: T
     trend: 1
     spline: true
@@ -14,6 +14,3 @@ unif:
  - b
 unif_nsig: 20
 clobber: True
-cores: 2
-tune: 100
-draws: 100
