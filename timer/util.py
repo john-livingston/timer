@@ -195,8 +195,13 @@ def get_corrected(data, name, soln, nplanets,
     
     if subtract_tc:
         offset = soln['t0']
+        if nplanets > 1:
+            offset = offset[0]
     else:
         offset = 0
+    
+    if isinstance(offset, np.ndarray):
+        offset = offset.item()
         
     x, y, yerr, x_hr = [data.get(i) for i in 'x y yerr x_hr'.split()]
     if mask is None:
@@ -221,7 +226,7 @@ def get_corrected(data, name, soln, nplanets,
         tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=-1)
         tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=-1)
     
-    sys_mod = lin_mod + mean
+    sys_mod = lin_mod.flatten() + mean
     
     cor = dict(
         x=x[mask]-offset, 

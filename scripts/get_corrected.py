@@ -7,6 +7,7 @@ import pandas as pd
 proj_root = f'{os.environ["HOME"]}/gitlab/timer'
 sys.path.append(proj_root)
 
+from timer.fit import TransitFit
 from timer.util import get_corrected
 
 wd = sys.argv[1]
