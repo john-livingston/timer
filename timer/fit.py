@@ -1,5 +1,5 @@
 import os
-import pickle
+import dill as pickle
 import re
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,7 +29,6 @@ defaults = dict(
         chains = 2,
         cores = 2,
         clobber = False,
-        inferencedata = False
     ),
 
     data = dict(
@@ -100,7 +99,6 @@ class TransitFit:
         if self.include_bump:
             self.bump = self.fit_params['bump']
         # sampler settings
-        self.inferencedata = fit_params['inferencedata']
         self.tune = fit_params['tune']
         self.draws = fit_params['draws']
         self.chains = fit_params['chains']
@@ -245,11 +243,10 @@ class TransitFit:
         plt.savefig(os.path.join(self.outdir, fn))
 
     def get_ic(self, ic='BIC', verbose=False):
-        map_soln = self.map_soln
-        max_logp = self.model.logp(map_soln)
+        soln, max_logp = util.get_map_soln(self.trace)
         nparams = sum([rv.dsize for rv in self.model.free_RVs])
         ndata = sum([len(v['x']) for v in self.data.values()])
-        return util.compute_ic(map_soln, max_logp, nparams, ndata, method=ic, verbose=verbose)
+        return util.compute_ic(soln, max_logp, nparams, ndata, method=ic, verbose=verbose)
         
     def plot_systematics(self, name, style=2, fn=None):
         
@@ -330,8 +327,7 @@ class TransitFit:
                 tune=tune,
                 draws=draws,
                 chains=chains,
-                cores=cores,
-                inferencedata=self.inferencedata
+                cores=cores
             )
             pickle.dump(self.trace, open(os.path.join(self.outdir, 'trace.pkl'), 'wb'))
 
@@ -345,9 +341,8 @@ class TransitFit:
         self.summary.to_csv(os.path.join(self.outdir, 'summary.csv'))
 
         soln, logp = util.get_map_soln(self.trace)
-        if logp > self.model.logp(self.map_soln):
-            self.map_soln = soln
-            pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
+        self.map_soln = soln
+        pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
             
         # for name in self.data.keys():
         #     fn = f'fit-{name}.png'
@@ -404,11 +399,8 @@ class TransitFit:
         
     def save_results(self):
         print('saving results')
-        if self.inferencedata:
-            flat_samps = self.trace.posterior.stack(sample=("chain", "draw"))
-            t0_s = flat_samps['t0'].values
-        else:
-            t0_s = self.trace['t0']
+        flat_samps = self.trace.posterior.stack(sample=("chain", "draw"))
+        t0_s = flat_samps['t0'].values
         with open(os.path.join(self.outdir, 'tc.txt'), 'w') as f:
             if self.nplanets > 1:
                 for i in range(self.nplanets):
@@ -416,12 +408,12 @@ class TransitFit:
             else:
                 f.write(f'{self.planets[0]} {t0_s.mean() + self.ref_time - 2454833} {t0_s.std()}\n')
         with open(os.path.join(self.outdir, 'ic.txt'), 'w') as f:
-            map_soln = self.map_soln
-            max_logp = self.model.logp(map_soln)
-            nparams = sum([rv.dsize for rv in self.model.free_RVs])
+            soln, max_logp = util.get_map_soln(self.trace)
+            nparams = sum([rv.size.eval() for rv in self.model.free_RVs])
             ndata = sum([len(v['x']) for v in self.data.values()])
             ics = 'BIC AIC AICc'.split()
             for ic in ics:
-                f.write(f'{ic} {util.compute_ic(map_soln, max_logp, nparams, ndata, method=ic, verbose=False)}\n')
+                val = util.compute_ic(soln, max_logp, nparams, ndata, method=ic, verbose=False)
+                f.write(f'{ic} {val:.2f}\n')
         if self.clobber:
             pass

@@ -36,20 +36,14 @@ def get_residuals(name, y, soln, mask=None, use_gp=False):
 
     return y[mask] - tra_mod - sys_mod
 
-def get_map_soln(trace, inferencedata=False):
-    if inferencedata:
-        # doesn't work!
-        max_lp = trace.sample_stats['lp'].max()
-        ix = trace.sample_stats['lp'] == max_lp
-        trace_map = trace.posterior.where(ix, drop=True)
-        flat_samps_map = trace_map.stack(sample=("chain", "draw"))
-        soln = {k:np.array(v['data']).flatten() for k,v in flat_samps_map.to_dict()['data_vars'].items()}
-    else:
-        idx = trace.get_sampler_stats('model_logp').argmax()
-        max_lp = trace.get_sampler_stats('model_logp')[idx]
-        vals = [trace.get_values(vn)[idx] for vn in trace.varnames]
-        soln = dict(zip(trace.varnames, vals))
-    return soln, max_lp
+def get_map_soln(trace):
+    # arviz trace is an InferenceData object
+    max_lp = trace.sample_stats["lp"].max()
+    ix = trace.sample_stats["lp"] == max_lp
+    trace_map = trace.posterior.where(ix, drop=True)
+    flat_samps_map = trace_map.stack(sample=("chain", "draw"))
+    soln = {k: v.values.item() if v.values.size == 1 else v.values for k, v in flat_samps_map.data_vars.items()}
+    return soln, max_lp.values.item()
 
 def get_var_names(data, bands, fit_basis, use_gp, fixed,
                   chromatic=False, log_sigma=True, weights=False):
@@ -183,9 +177,9 @@ def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
     if method == 'BIC':
         ic = -2 * max_logp + nparams * np.log(ndata)
     elif method == 'AIC':
-        ic = 2 * nparams - max_logp
+        ic = 2 * nparams - 2 * max_logp
     elif method == 'AICc':
-        ic = 2 * nparams - max_logp
+        ic = 2 * nparams - 2 * max_logp
         ic += 2 * (nparams**2 + nparams) / (ndata - nparams - 1)
 
     if verbose:
@@ -194,4 +188,4 @@ def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
         print('Max logp = {}'.format(max_logp))
         print('{} = {}'.format(method, ic))
 
-    return ic
+    return float(ic)

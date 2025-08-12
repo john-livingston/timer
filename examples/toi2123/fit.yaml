@@ -13,4 +13,7 @@ unif:
  - dur
  - b
 unif_nsig: 20
-cores: 1
+clobber: True
+cores: 2
+tune: 100
+draws: 100

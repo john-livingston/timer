@@ -1,15 +1,9 @@
 import numpy as np
 import exoplanet as xo
-import pymc3 as pm
-import aesara_theano_fallback.tensor as tt
-from celerite2.theano import terms, GaussianProcess
+import pymc as pm
+import pytensor.tensor as pt
 
-use_pymc3_ext = True
-try:
-    import pymc3_ext as pmx
-except:
-    print("not using pymc3-ext (using pm.find_MAP instead of pmx.optimize)")
-    use_pymc3_ext = False
+use_pymc3_ext = False
 
 def bump_model(t, t_center, width, amplitude, theano=True):
     """
@@ -27,7 +21,7 @@ def bump_model(t, t_center, width, amplitude, theano=True):
     amplitude : float
         The amplitude of the bump
     theano : bool, optional
-        If True, use Theano tensors for compatibility with PyMC3 (default is True)
+        If True, use pytensor tensors for compatibility with PyMC (default is True)
 
     Returns:
     --------
@@ -36,8 +30,8 @@ def bump_model(t, t_center, width, amplitude, theano=True):
     """
     
     if theano:
-        # Use Theano tensors for PyMC3 compatibility
-        bump = amplitude * tt.exp(-(t - t_center)**2 / (2 * width**2))
+        # Use pytensor tensors for PyMC compatibility
+        bump = amplitude * pt.exp(-(t - t_center)**2 / (2 * width**2))
     else:
         # Use NumPy for standard Python calculations
         bump = amplitude * np.exp(-(t - t_center)**2 / (2 * width**2))
@@ -73,25 +67,17 @@ def aflare1(t, tpeak, fwhm, ampl, theano=True):
     _fd = [0.689008, -1.60053, 0.302963, -0.278318]
     
     if theano:
-        fun1 = lambda x: (  _fr[0]+                       # 0th order
-                            _fr[1]*((x-tpeak)/fwhm)+      # 1st order
-                            _fr[2]*((x-tpeak)/fwhm)**2.+  # 2nd order
-                            _fr[3]*((x-tpeak)/fwhm)**3.+  # 3rd order
-                            _fr[4]*((x-tpeak)/fwhm)**4. ) # 4th order
-        fun2 = lambda x: (  _fd[0]*tt.exp( ((x-tpeak)/fwhm)*_fd[1] ) +
-                            _fd[2]*tt.exp( ((x-tpeak)/fwhm)*_fd[3] ) )
-        part1 = tt.switch((t > tpeak-fwhm) & (t <= tpeak), fun1(t), 0)
-        part2 = tt.switch(t > tpeak, fun2(t), 0)
+        x = (t - tpeak) / fwhm
+        f1 = _fr[0] + _fr[1] * x + _fr[2] * x**2 + _fr[3] * x**3 + _fr[4] * x**4
+        f2 = _fd[0] * pt.exp(x * _fd[1]) + _fd[2] * pt.exp(x * _fd[3])
+        part1 = pt.switch((t > tpeak - fwhm) & (t <= tpeak), f1, 0)
+        part2 = pt.switch(t > tpeak, f2, 0)
         flare = part1 + part2
     else:
-        fun1 = lambda x: (  _fr[0]+                       # 0th order
-                            _fr[1]*((x-tpeak)/fwhm)+      # 1st order
-                            _fr[2]*((x-tpeak)/fwhm)**2.+  # 2nd order
-                            _fr[3]*((x-tpeak)/fwhm)**3.+  # 3rd order
-                            _fr[4]*((x-tpeak)/fwhm)**4. ) # 4th order
-        fun2 = lambda x: (  _fd[0]*np.exp( ((x-tpeak)/fwhm)*_fd[1] ) +
-                            _fd[2]*np.exp( ((x-tpeak)/fwhm)*_fd[3] ) )
-        ix1 = (t > tpeak-fwhm) & (t <= tpeak) 
+        x = (t - tpeak) / fwhm
+        f1 = _fr[0] + _fr[1] * x + _fr[2] * x**2 + _fr[3] * x**3 + _fr[4] * x**4
+        f2 = _fd[0] * np.exp(x * _fd[1]) + _fd[2] * np.exp(x * _fd[3])
+        ix1 = (t > tpeak - fwhm) & (t <= tpeak)
         ix2 = t > tpeak
         flare = np.zeros_like(t)
         flare[ix1] = fun1(t[ix1])
@@ -101,7 +87,7 @@ def aflare1(t, tpeak, fwhm, ampl, theano=True):
 
 
 def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None, 
-           mu=None, sd=None, lower=None, upper=None, verbose=False, testval=None):
+           mu=None, sd=None, lower=None, upper=None, verbose=False, initval=None):
     if priors is not None:
         dist = priors[f'{key}_prior']
     if name is None:
@@ -110,9 +96,9 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
         if priors is not None:
             mu, sd = priors[key], priors[f'{key}_unc']
         fun = pm.Normal if bounded is None else bounded
-        if testval is None:
-            testval = mu
-        rv = fun(name, mu=mu, sd=sd, shape=shape, testval=testval)
+        if initval is None:
+            initval = mu
+        rv = fun(name, mu=mu, sigma=sd, shape=shape, initval=initval)
         spec = f'{dist}({mu},{sd})'
     elif dist == 'uniform':
         if priors is not None:
@@ -125,9 +111,9 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
             ix = upper > bounded.upper
             if ix.any():
                 upper[ix] = bounded.upper
-        if testval is None:
-            testval = priors[key]
-        rv = pm.Uniform(name, lower=lower, upper=upper, shape=shape, testval=testval)
+        if initval is None:
+            initval = priors[key]
+        rv = pm.Uniform(name, lower=lower, upper=upper, shape=shape, initval=initval)
         spec = f'{dist}({lower},{upper})'
     else:
         print(f'dist={dist} not supported')
@@ -135,14 +121,16 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
         print(f'{name} ~ {spec}')
     return rv
 
+def BoundedNormal(name, mu, sd, shape, lower=0, upper=1):
+    return pm.TruncatedNormal(name, mu=mu, sigma=sd, lower=lower, upper=upper, shape=shape)
+
 def sample(
     model,
     map_soln,
     tune=1000,
     draws=1000,
     chains=2,
-    cores= 2,
-    inferencedata=False
+    cores= 2
 ):
     with model:
         trace = pm.sample(
@@ -152,7 +140,6 @@ def sample(
             cores=cores,
             chains=chains,
             target_accept=0.95,
-            return_inferencedata=inferencedata,
             init="adapt_full",
         )
 
@@ -175,9 +162,6 @@ def build(
 ):
 
     with pm.Model() as model:
-
-        BoundedNormal = pm.Bound(pm.Normal, lower=0, upper=1)
-        BoundedUniform = pm.Bound(pm.Uniform, lower=0, upper=1)
 
         v = {}
 
@@ -208,8 +192,7 @@ def build(
             if p in fixed:
                 v[p] = priors[p]
             else:
-                bounded = BoundedNormal if priors[f'{p}_prior'] == 'gaussian' else BoundedUniform
-                v[p] = get_rv(key=p, priors=priors, shape=nplanets, verbose=verbose, bounded=bounded)
+                v[p] = get_rv(key=p, priors=priors, shape=nplanets, verbose=verbose)
         elif basis == 'density':
             raise NotImplementedError
 
@@ -269,30 +252,27 @@ def build(
                             shape=nplanets,
                             mu=priors[p],
                             sd=priors[f'{p}_unc'],
-                            bounded=BoundedNormal,
                             verbose=verbose
                         )
                 elif p in ['ror', 'b']:
-                    bounded = BoundedNormal if priors[f'{p}_prior'] == 'gaussian' else BoundedUniform
                     v[p] = get_rv(
                         key=p,
                         priors=priors,
                         shape=nplanets, 
-                        bounded=bounded,
                         verbose=verbose
                     )
                 else:
                     v[p] = get_rv(
-                        key=p,
-                        priors=priors,
-                        shape=nplanets, 
-                        verbose=verbose
-                    )
+                            key=p,
+                            priors=priors,
+                            shape=nplanets, 
+                            verbose=verbose
+                        )
         
         # Orbit model
         if basis == 'duration':
             if chromatic:
-                ror = tt.mean([v[f'ror_{band}'] for band in bands])
+                ror = pt.mean([v[f'ror_{band}'] for band in bands])
             else:
                 ror = v['ror']
             orbit = xo.orbits.KeplerianOrbit(
@@ -316,7 +296,7 @@ def build(
 
             if include_mean:
                 # mean flux of the light curve (i.e. the bias term)
-                mean = pm.Normal(f"{name}_mean", mu=0.0, sd=10.0, testval=0)
+                mean = pm.Normal(f"{name}_mean", mu=0.0, sigma=10.0, initval=0)
             else:
                 mean = 0
 
@@ -334,7 +314,7 @@ def build(
                     verbose=verbose
                 )
                 parameters[name] = weights
-                lm = pm.Deterministic(f"{name}_lm", tt.dot(X[mask], weights))
+                lm = pm.Deterministic(f"{name}_lm", pt.dot(X[mask], weights))
             else:
                 lm = 0
 
@@ -344,10 +324,9 @@ def build(
             log_sigma_lc = get_rv(
                 name=f'{name}_log_sigma_lc',
                 dist='uniform',
-                shape=1,
                 lower=lower,
                 upper=upper,
-                testval=-9,
+                initval=-9,
                 verbose=verbose
             )
             priors[f'{name}_log_sigma_lc'] = (upper+lower)/2
@@ -393,7 +372,7 @@ def build(
                 * 1e3
             )
             pm.Deterministic(f"{name}_light_curves", light_curves)
-            light_curve = tt.sum(light_curves, axis=-1) + mean + lm + flare + bump
+            light_curve = pt.sum(light_curves, axis=-1) + mean + lm + flare + bump
             resid = y[mask] - light_curve
 
             # Compute high-res model light curve
@@ -405,19 +384,12 @@ def build(
 
             # GP likelihood
             if use_gp:
-                kernel = terms.SHOTerm(
-                    sigma=tt.exp(log_sigma_gp),
-                    rho=tt.exp(log_rho_gp),
-                    Q=1 / np.sqrt(2),
-                )
-                gp = GaussianProcess(kernel, t=x[mask], yerr=np.sqrt(tt.exp(2*log_sigma_lc) + yerr[mask]**2))
-                gp.marginal(f"{name}_gp", observed=resid)
-                pm.Deterministic(f"{name}_gp_pred", gp.predict(resid))
+                raise NotImplementedError("GP support is temporarily disabled")
             else:
                 y_observed = pm.Normal(
                     f"{name}_y_observed", 
                     mu=light_curve,
-                    sd=np.sqrt(tt.exp(2*log_sigma_lc) + yerr[mask]**2), 
+                    sigma=np.sqrt(pt.exp(2*log_sigma_lc) + yerr[mask]**2), 
                     observed=y[mask]
                 )
 
@@ -433,20 +405,15 @@ def build(
         # track the implied density
         pm.Deterministic("rho_circ", orbit.rho_star)
         
-        print(model.check_test_point())
-
         # Fit for the maximum a posteriori parameters, I've found that I can get
         # a better solution by trying different combinations of parameters in turn
         if start is None:
-            start = model.test_point
+            start = model.initial_point()
         # all
-        if use_pymc3_ext:
-            map_soln = pmx.optimize(start=start)
-        else:
-            map_soln = pm.find_MAP(start=start)
+        map_soln = pm.find_MAP(start=start)
 
 #         # lm
-#         map_soln = pmx.optimize(
+#         map_soln = pm.find_MAP(
 #             start=map_soln, vars=[parameters[name] for name in datasets.keys()]
 #         )
 #         # transit
@@ -456,30 +423,30 @@ def build(
 #                 pnames += [f'ror_{band}' for band in bands]
 #             else:
 #                 pnames += ['ror']
-#         map_soln = pmx.optimize(
+#         map_soln = pm.find_MAP(
 #             start=map_soln, vars=[v[p] for p in pnames]
 #         )
 #         # gp
 #         if use_gp:
 #             for name in datasets.keys():
-#                 map_soln = pmx.optimize(
+#                 map_soln = pm.find_MAP(
 #                     start=map_soln, vars=parameters[f'{name}_gp']
 #                 )
 #         # noise
-#         map_soln = pmx.optimize(
+#         map_soln = pm.find_MAP(
 #             start=map_soln, vars=[parameters[f'{name}_noise'] for name in datasets.keys()]
 #         )
 
 #         # # sequential optimization
 #         # pnames = 't0 dur b'.split()
 #         # for p in [i for i in pnames if i not in fixed]:
-#         #     map_soln = pmx.optimize(start=map_soln, vars=[v[p]])
+#         #     map_soln = pm.find_MAP(start=map_soln, vars=[v[p]])
 #         # # simultaneous optimization
-#         # map_soln = pmx.optimize(
+#         # map_soln = pm.find_MAP(
 #         #     start=map_soln, vars=[v[p] for p in pnames]
 #         # )
 
 #         # simultaneous optimization of all parameters
-#         map_soln = pmx.optimize(start=map_soln)
+#         map_soln = pm.find_MAP(start=map_soln)
 
     return model, map_soln

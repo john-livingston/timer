@@ -25,7 +25,7 @@ def read_generic(
     # READ DATA
     ncols = len(open(fp).readline().split())
     names = 'time flux fluxerr'.split() + [f'c{i}' for i in range(ncols-3)]
-    df = pd.read_csv(fp, delim_whitespace=True, names=names)
+    df = pd.read_csv(fp, sep='\s+', names=names)
     if verbose:
         print(f'\nreading: {os.path.basename(fp)}')
         print(f'cadence: {np.median(np.diff(df.time.values))*86400 :.1f} seconds')

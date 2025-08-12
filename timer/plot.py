@@ -41,13 +41,13 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
            chromatic=False, sigma_lc=True, include_flare=False, include_bump=False, show_prior=True):
 
     var_names = [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
-    trace_ = trace['t0'].copy()
+    trace_ = trace.posterior['t0'].values.reshape(-1, nplanets)
     truths = soln['t0']
     i = nplanets
     for par in 'dur period b'.split():
         if par not in fixed:
             var_names += [f'{par}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [par]
-            trace_ = np.c_[trace_, trace[par].copy()]
+            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, nplanets)]
             truths = np.append(truths, soln[par])
     if 'ror' not in fixed:
         if chromatic:
@@ -56,29 +56,29 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
                     var_names += [f'ror_{band}_{i+1}' for i in range(nplanets)]
                 else:
                     var_names += [f'ror_{band}']
-                trace_ = np.c_[trace_, trace[f'ror_{band}'].copy()]
+                trace_ = np.c_[trace_, trace.posterior[f'ror_{band}'].values.copy()]
                 truths = np.append(truths, soln[f'ror_{band}'])
         else:
             var_names += [f'ror_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['ror']
-            trace_ = np.c_[trace_, trace['ror'].copy()]
+            trace_ = np.c_[trace_, trace.posterior['ror'].values.reshape(-1, nplanets)]
             truths = np.append(truths, soln['ror'])
     if sigma_lc:
         for name in data.keys():
             par = f'{name}_log_sigma_lc'
             var_names += [par]
-            trace_ = np.c_[trace_, trace[par].copy()]
+            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
             truths = np.append(truths, soln[par])
     if include_flare:
         for p in 'tpeak fwhm ampl'.split():
             par = f'flare_{p}'
             var_names += [par]
-            trace_ = np.c_[trace_, trace[par].copy()]
+            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
             truths = np.append(truths, soln[par])
     if include_bump:
         for p in 'tcenter width ampl'.split():
             par = f'bump_{p}'
             var_names += [par]
-            trace_ = np.c_[trace_, trace[par].copy()]
+            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
             truths = np.append(truths, soln[par])
 
     import corner
@@ -163,22 +163,22 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
         tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=-1)
     else:
         if f'{name}_mean' in soln.keys():
-            mean = np.median(trace[f"{name}_mean"])
+            mean = np.median(trace.posterior[f"{name}_mean"].values)
         else:
             mean = 0
-        lcjit = np.exp(np.median(trace[f'{name}_log_sigma_lc']))
-        lin_mod = np.median(trace[f'{name}_lm'], axis=0) if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
-        flare_mod = np.median(trace[f'{name}_flare'], axis=0) if include_flare else 0
-        bump_mod = np.median(trace[f'{name}_bump'], axis=0) if include_bump else 0
-        tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=-1)
-        tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=-1)
+        lcjit = np.exp(np.median(trace.posterior[f'{name}_log_sigma_lc'].values))
+        lin_mod = np.median(trace.posterior[f'{name}_lm'].values, axis=(0, 1)) if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
+        flare_mod = np.median(trace.posterior[f'{name}_flare'].values, axis=(0, 1)) if include_flare else 0
+        bump_mod = np.median(trace.posterior[f'{name}_bump'].values, axis=(0, 1)) if include_bump else 0
+        tra_mod = np.sum(np.median(trace.posterior[f"{name}_light_curves"].values, axis=(0, 1)), axis=-1)
+        tra_mod_hr = np.sum(np.median(trace.posterior[f"{name}_light_curves_hr"].values, axis=(0, 1)), axis=-1)
     sys_mod = lin_mod + flare_mod + bump_mod + mean
 
     if use_gp:
         if trace is None or not median:
             gp_mod = soln[f"{name}_gp_pred"]
         else:
-            gp_mod = np.median(trace[f"{name}_gp_pred"], axis=0)
+            gp_mod = np.median(trace.posterior[f"{name}_gp_pred"].values, axis=0)
         sys_mod += gp_mod
 
     if axes is None:
@@ -204,7 +204,7 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
             flat_samps = trace.posterior.stack(sample=("chain", "draw"))
             pred = np.percentile(flat_samps[f"{name}_lc_pred_hr"], [16, 50, 84], axis=-1)
         else:
-            pred = np.percentile(trace[f"{name}_light_curves_hr"], [16, 50, 84], axis=0)
+            pred = np.percentile(trace.posterior[f"{name}_light_curves_hr"].values, [16, 50, 84], axis=(0, 1))
         ax.plot(x_hr, pred[1].sum(axis=-1), color=colors[0], label='transit')
         art = ax.fill_between(
             x_hr, pred[0].sum(axis=-1), pred[2].sum(axis=-1), color=colors[0], alpha=0.5, zorder=1
@@ -270,7 +270,7 @@ def spline(fit, name, style=1):
         def plot(axs, x, X, w, name):
             # axs[0].plot(x, X)
             for i,y in enumerate(X.T):
-                axs[0].plot(x, y, label=f'w = {w[i] :.3f}')
+                axs[0].plot(x, y, label=f'w = {w[i].item() :.3f}')
             axs[0].legend()
             axs[1].plot(x, np.dot(X,w), color='k')
             plt.setp(axs[0], title=f'basis vectors: {name}')
@@ -315,7 +315,7 @@ def spline(fit, name, style=1):
 
         def plot(ax, x, X, w, name):
             for i,y in enumerate(X.T):
-                ax.plot(x, y, label=f'w = {w[i] :.3f}')
+                ax.plot(x, y, label=f'w = {w[i].item() :.3f}')
             # ax.plot(x, np.dot(X,w), color='k', label=f'sum')
             ax.legend()
             plt.setp(ax, title=f'{name}')
