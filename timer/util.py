@@ -189,3 +189,46 @@ def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
         print('{} = {}'.format(method, ic))
 
     return float(ic)
+
+def get_corrected(data, name, soln, nplanets, 
+                  mask=None, trace=None, use_gp=False, median=True, subtract_tc=True):
+    
+    if subtract_tc:
+        offset = soln['t0']
+    else:
+        offset = 0
+        
+    x, y, yerr, x_hr = [data.get(i) for i in 'x y yerr x_hr'.split()]
+    if mask is None:
+        mask = np.ones(len(x), dtype=bool)
+
+    if trace is None or not median:
+        if f'{name}_mean' in soln.keys():
+            mean = soln[f"{name}_mean"]
+        else:
+            mean = 0
+        lcjit = np.exp(soln[f'{name}_log_sigma_lc'])
+        lin_mod = soln[f'{name}_lm']
+        tra_mod = np.sum(soln[f"{name}_light_curves"], axis=-1)
+        tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=-1)
+    else:
+        if f'{name}_mean' in soln.keys():
+            mean = np.median(trace[f"{name}_mean"])
+        else:
+            mean = 0
+        lcjit = np.exp(np.median(trace[f'{name}_log_sigma_lc']))
+        lin_mod = np.median(trace[f'{name}_lm'], axis=0)
+        tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=-1)
+        tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=-1)
+    
+    sys_mod = lin_mod + mean
+    
+    cor = dict(
+        x=x[mask]-offset, 
+        y=y[mask]-sys_mod,
+        yerr=yerr[mask], 
+        x_hr=x_hr-offset, 
+        tra_mod_hr=tra_mod_hr
+    )
+    
+    return cor

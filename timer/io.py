@@ -29,7 +29,7 @@ def read_generic(
     if fp.endswith('.txt'):
         ncols = len(open(fp).readline().split())
         names = 'time flux fluxerr'.split() + [f'c{i}' for i in range(ncols-3)]
-        df = pd.read_csv(fp, sep='\s+', names=names)
+        df = pd.read_csv(fp, sep=r'\s+', names=names)
     elif fp.endswith('.csv'):
         df = pd.read_csv(fp)
     else:
@@ -142,11 +142,11 @@ def read_afphpot_csv(
     fluxcol='flux',
     errcol='fluxerr',
     verbose=True
-)
+):
 
     return read_generic(
         fp,
-        binsize=binsize
+        binsize=binsize,
         timeoffset=timeoffset,
         spline=spline,
         spline_knots=spline_knots,
@@ -162,5 +162,4 @@ def read_afphpot_csv(
         fluxcol='Flux',
         errcol='Err',
         verbose=verbose
-
     )
