@@ -234,7 +234,7 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
     fig.subplots_adjust(hspace=0)
     return fig
 
-def spline(fit, name, style=1):
+def systematics(fit, name, style=1):
 
     trend = fit.fit_params['data'][name]['trend']
     ntrend = trend if trend else 0
@@ -315,9 +315,7 @@ def spline(fit, name, style=1):
 
         def plot(ax, x, X, w, name):
             for i,y in enumerate(X.T):
-                ax.plot(x, y, label=f'w = {w[i].item() :.3f}')
-            # ax.plot(x, np.dot(X,w), color='k', label=f'sum')
-            ax.legend()
+                ax.plot(x, y, label=f'w = {w[i].item() :.1f}')
             plt.setp(ax, title=f'{name}')
 
         if covariates and not spline and not trend:
@@ -325,6 +323,7 @@ def spline(fit, name, style=1):
 
         elif spline and not covariates and not trend:
             plot(axs, x_, X_spl, w_spl, 'spline')
+            axs[0].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
 
         elif trend and not covariates and not spline:
             plot(axs, x_, X_tre, w_tre, 'trend')
@@ -332,19 +331,28 @@ def spline(fit, name, style=1):
         elif covariates and spline and not trend:
             plot(axs[0], x_, X_cov, w_cov, 'covariates')
             plot(axs[1], x_, X_spl, w_spl, 'spline')
+            axs[0].plot(x_, np.dot(X_cov, w_cov), color='k', label=f'sum')
+            axs[1].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
 
         elif covariates and trend and not spline:
             plot(axs[0], x_, X_cov, w_cov, 'covariates')
             plot(axs[1], x_, X_tre, w_tre, 'trend')
+            axs[0].plot(x_, np.dot(X_cov, w_cov), color='k', label=f'sum')
 
         elif trend and spline and not covariates:
             plot(axs[0], x_, X_tre, w_tre, 'trend')
             plot(axs[1], x_, X_spl, w_spl, 'spline')
+            axs[1].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
 
         elif covariates and trend and spline:
             plot(axs[0], x_, X_cov, w_cov, 'covariates')
             plot(axs[1], x_, X_tre, w_tre, 'trend')
             plot(axs[2], x_, X_spl, w_spl, 'spline')
+            axs[0].plot(x_, np.dot(X_cov, w_cov), color='k', label=f'sum')
+            axs[2].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
+
+        for ax in axs[:-1]:
+            ax.legend(fontsize=8)
 
         # if ncols > 1:
         #     axs[-1].plot(x_, np.dot(X,w), color='k')

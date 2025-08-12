@@ -250,7 +250,7 @@ class TransitFit:
         
     def plot_systematics(self, name, style=2, fn=None):
         
-        fig = plot.spline(self, name, style=style)
+        fig = plot.systematics(self, name, style=style)
         if fn is not None:
             plt.savefig(os.path.join(self.outdir, fn), dpi=200, bbox_inches='tight')
 

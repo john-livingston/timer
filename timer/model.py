@@ -407,44 +407,42 @@ def build(
         # a better solution by trying different combinations of parameters in turn
         if start is None:
             start = model.initial_point()
+
         # all
-        map_soln = pm.find_MAP(start=start)
+        map_soln = pm.find_MAP(start=start, method='Newton-CG')
 
-#         # lm
-#         map_soln = pm.find_MAP(
-#             start=map_soln, vars=[parameters[name] for name in datasets.keys()]
-#         )
-#         # transit
-#         pnames = [i for i in 't0 b dur'.split() if i not in fixed]
-#         if 'ror' not in fixed:
-#             if chromatic:
-#                 pnames += [f'ror_{band}' for band in bands]
-#             else:
-#                 pnames += ['ror']
-#         map_soln = pm.find_MAP(
-#             start=map_soln, vars=[v[p] for p in pnames]
-#         )
-#         # gp
-#         if use_gp:
-#             for name in datasets.keys():
-#                 map_soln = pm.find_MAP(
-#                     start=map_soln, vars=parameters[f'{name}_gp']
-#                 )
-#         # noise
-#         map_soln = pm.find_MAP(
-#             start=map_soln, vars=[parameters[f'{name}_noise'] for name in datasets.keys()]
-#         )
+        # # lm
+        # map_soln = pm.find_MAP(
+        #     start=map_soln, vars=[parameters[name] for name in datasets.keys()]
+        # )
 
-#         # # sequential optimization
-#         # pnames = 't0 dur b'.split()
-#         # for p in [i for i in pnames if i not in fixed]:
-#         #     map_soln = pm.find_MAP(start=map_soln, vars=[v[p]])
-#         # # simultaneous optimization
-#         # map_soln = pm.find_MAP(
-#         #     start=map_soln, vars=[v[p] for p in pnames]
-#         # )
+        # # transit
+        # pnames = [i for i in 't0 b dur'.split() if i not in fixed]
+        # if 'ror' not in fixed:
+        #     if chromatic:
+        #         pnames += [f'ror_{band}' for band in bands]
+        #     else:
+        #         pnames += ['ror']
+        # map_soln = pm.find_MAP(
+        #     start=map_soln, vars=[v[p] for p in pnames]
+        # )
 
-#         # simultaneous optimization of all parameters
-#         map_soln = pm.find_MAP(start=map_soln)
+        # # noise
+        # map_soln = pm.find_MAP(
+        #     start=map_soln, vars=[parameters[f'{name}_noise'] for name in datasets.keys()]
+        # )
+
+        # # sequential optimization
+        # pnames = 't0 dur b'.split()
+        # for p in [i for i in pnames if i not in fixed]:
+        #     map_soln = pm.find_MAP(start=map_soln, vars=[v[p]])
+
+        # # simultaneous optimization
+        # map_soln = pm.find_MAP(
+        #     start=map_soln, vars=[v[p] for p in pnames]
+        # )
+
+        # # simultaneous optimization of all parameters
+        # map_soln = pm.find_MAP(start=map_soln)
 
     return model, map_soln
