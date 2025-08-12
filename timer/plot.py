@@ -227,7 +227,7 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
     if annotate_sigma:
         # cadence = np.median(np.diff(x)) * 86400
         # annotate(ax, f"$\sigma$ = {resid.std() :.1f} ppt / {cadence :.0f} sec")
-        annotate(ax, f"$\sigma$ = {resid.std() :.1f} ppt")
+        annotate(ax, f"$\\sigma$ = {resid.std() :.1f} ppt")
 
 #     fig.suptitle(name)
 #     axes[0].set_title(name)
