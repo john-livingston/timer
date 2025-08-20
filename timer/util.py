@@ -102,7 +102,7 @@ def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, 
 
     return mask
 
-def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, unif=[], unif_nsig=10):
+def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, uniform={}):
 
     priors = {}
     priors['r_star'] = np.array(star['radius'][0])
@@ -123,11 +123,23 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
     priors['u_star_unc'] = {band:ld[1::2] for band,ld in zip(bands, ldp)}
 
     for par in 'period dur ror b'.split():
-        priors[par] = np.array([i[par][0] for i in planets])
+        # Always store the original mean value from sys.yaml
+        original_mean = np.array([i[par][0] for i in planets])
+        priors[par] = original_mean
+        
         if par not in fixed:
-            if par in unif:
+            if par in uniform:
                 priors[f'{par}_prior'] = 'uniform'
-                priors[f'{par}_unc'] = unif_nsig * np.array([i[par][1] for i in planets])
+                # For uniform priors, we need to calculate the width from the bounds
+                # The model expects: lower = priors[key] - priors[f'{key}_unc']/2
+                #                   upper = priors[key] + priors[f'{key}_unc']/2
+                # So: priors[f'{key}_unc'] = upper - lower
+                bounds = np.array(uniform[par])
+                priors[f'{par}_unc'] = bounds[1] - bounds[0]
+                # Store the center point as the parameter value for bounds calculation
+                priors[par] = np.array([(bounds[0] + bounds[1]) / 2] * len(planets))
+                # But store the original mean for use as initval
+                priors[f'{par}_initval'] = original_mean
             else:
                 # assume gaussian
                 priors[f'{par}_prior'] = 'gaussian'

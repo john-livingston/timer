@@ -110,7 +110,11 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
             if ix.any():
                 upper[ix] = bounded.upper
         if initval is None:
-            initval = priors[key]
+            # Use the original mean value from sys.yaml if available, otherwise use priors[key]
+            if priors is not None and f'{key}_initval' in priors:
+                initval = priors[f'{key}_initval']
+            else:
+                initval = priors[key]
         rv = pm.Uniform(name, lower=lower, upper=upper, shape=shape, initval=initval)
         spec = f'{dist}({lower},{upper})'
     else:
@@ -245,11 +249,10 @@ def build(
                     for band in bands:
                         name = f'ror_{band}'
                         v[name] = get_rv(
+                            key=p,
                             name=name,
-                            dist='gaussian',
+                            priors=priors,
                             shape=nplanets,
-                            mu=priors[p],
-                            sd=priors[f'{p}_unc'],
                             verbose=verbose
                         )
                 elif p in ['ror', 'b']:

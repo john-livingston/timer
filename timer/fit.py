@@ -18,8 +18,6 @@ defaults = dict(
         include_mean = True,
         include_flare = False,
         include_bump = False,
-        unif = ['t0'],
-        unif_nsig = 10,
         use_gp = False,
     ),
 
@@ -93,8 +91,7 @@ class TransitFit:
         self.include_flare = fit_params['include_flare']
         self.include_bump = fit_params['include_bump']
         self.use_gp = fit_params['use_gp']
-        self.unif = fit_params['unif']
-        self.unif_nsig = fit_params['unif_nsig']
+        self.uniform = fit_params.get('uniform', {})
         if self.include_flare:
             self.flare = self.fit_params['flare']
         if self.include_bump:
@@ -189,11 +186,10 @@ class TransitFit:
         planets = [self.sys_params['planets'][k] for k in self.planets]
         x_mean = np.mean([v['x'].mean() for k,v in self.data.items()])
         tc_guess, tc_guess_unc = util.get_tc_prior(self.fit_params, x_mean, self.ref_time)
-        unif = self.unif
         self.priors = util.get_priors(
             self.fit_basis, self.sys_params['star'], 
             planets, self.fixed, self.bands,
-            tc_guess, tc_guess_unc, unif=unif, unif_nsig=self.unif_nsig
+            tc_guess, tc_guess_unc, uniform=self.uniform
         )
         if self.include_flare:
             # lower = min([self.data[k]['x'].min() for k in self.data.keys()])
