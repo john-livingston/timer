@@ -124,7 +124,7 @@ def read_generic(
 
     return x, y, yerr, X, texp, x_hr, ref_time
 
-def read_afphpot_csv(
+def read_afphot(
     fp, 
     binsize=1/1440,
     timeoffset=0,
@@ -138,9 +138,6 @@ def read_afphpot_csv(
     subtract_reftime=True,
     chunk_offset=False,
     chunk_thresh=0.02,
-    timecol='time',
-    fluxcol='flux',
-    errcol='fluxerr',
     verbose=True
 ):
 

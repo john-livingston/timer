@@ -43,6 +43,7 @@ defaults = dict(
         binsize = 5/1440,
         chunk_offset = False,
         chunk_thresh = 0,
+        format = 'generic'
     ),
 )
 
@@ -119,7 +120,13 @@ class TransitFit:
             if b not in self.bands:
                 self.bands.append(b)
             fp = os.path.join(self.wd, fn)
-            x, y, yerr, X, texp, x_hr, ref_time = io.read_generic(
+            if data[n]['format'] == 'generic':
+                read_fn = io.read_generic
+            elif data[n]['format'] == 'afphot':
+                read_fn = io.read_afphot
+            else:
+                raise ValueError("format must be 'generic' or 'afphot'")
+            x, y, yerr, X, texp, x_hr, ref_time = read_fn(
                 fp, 
                 binsize=data[n]['binsize'],
                 spline=data[n]['spline'],
