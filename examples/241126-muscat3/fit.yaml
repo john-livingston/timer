@@ -1,0 +1,43 @@
+data:
+  m3g:
+    file: IRAS04125_241126_muscat3_g_c345_r18.csv
+    band: g
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    # trim_end: 0.01
+    format: 'afphot'
+  m3r:
+    file: IRAS04125_241126_muscat3_r_c26_r18.csv
+    band: r
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    # trim_end: 0.01
+    format: 'afphot'
+  m3i:
+    file: IRAS04125_241126_muscat3_i_c23456_r18.csv
+    band: i
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    # trim_end: 0.01
+    format: 'afphot'
+  m3z:
+    file: IRAS04125_241126_muscat3_z_c23456_r22.csv
+    band: z
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    # trim_end: 0.01
+    format: 'afphot'
+planets: b
+tc_pred: 2460641.823095
+tc_pred_unc: 0.1
+chromatic: true
+uniform:
+  ror: [0,0.1]
+  b: [0,1]
+clobber: true
+tune: 100
+draws: 100
