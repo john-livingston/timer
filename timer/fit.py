@@ -2,6 +2,7 @@ import os
 import dill as pickle
 import re
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import arviz as az
 from astropy.time import Time
@@ -37,7 +38,8 @@ defaults = dict(
         trend = None,
         trim_beg = None,
         trim_end = None,
-        nsig_clip = 7,
+        clip = False,
+        clip_nsig = 7,
         binsize = 5/1440,
         chunk_offset = False,
         chunk_thresh = 0,
@@ -140,8 +142,7 @@ class TransitFit:
             print(f'loading data: {fn}')
             print(f'data span: {data_iso[0]} - {data_iso[1]}')
             print(f'ref. time: {ref_time}')
-            nsig_clip = data[n]['nsig_clip']
-            self.data[n] = dict(x=x, y=y, yerr=yerr, X=X, texp=texp, x_hr=x_hr, band=b, ref_time=ref_time, nsig_clip=nsig_clip)
+            self.data[n] = dict(x=x, y=y, yerr=yerr, X=X, texp=texp, x_hr=x_hr, band=b, ref_time=ref_time)
             self.masks[n] = None
         ref_times = [v['ref_time'] for k,v in self.data.items()]
         self.ref_time = min(ref_times)
@@ -297,21 +298,22 @@ class TransitFit:
         include_flare = self.include_flare
         include_bump = self.include_bump
         for name, data in self.data.items():
-            if self.clobber or self.masks[name] is None:
-                x, y = [data.get(i) for i in 'x y'.split()]
-                map_soln, use_gp = self.map_soln, self.use_gp, 
-                nsig_clip = self.data[name]['nsig_clip']
-                if fn is None:
-                    fn = f'{name}-outliers.png'
-                fp = os.path.join(self.outdir, fn)
-                self.masks[name] = util.get_outlier_mask(
-                    x, y, name, map_soln, use_gp, 
-                    nsig=nsig_clip, include_flare=include_flare, include_bump=include_bump, fp=fp
-                    )
-                n_outliers = self.masks[name].size - self.masks[name].sum()
-                if n_outliers > 0:
-                    print(f'clipped {n_outliers} outlier(s)')
-                    clipped = True
+            if self.fit_params['data'][name].get('clip', False):
+                if self.clobber or self.masks[name] is None:
+                    x, y = [data.get(i) for i in 'x y'.split()]
+                    map_soln, use_gp = self.map_soln, self.use_gp,
+                    clip_nsig = self.fit_params['data'][name].get('clip_nsig', 7)
+                    if fn is None:
+                        fn = f'{name}-outliers.png'
+                    fp = os.path.join(self.outdir, fn)
+                    self.masks[name] = util.get_outlier_mask(
+                        x, y, name, map_soln, use_gp,
+                        nsig=clip_nsig, include_flare=include_flare, include_bump=include_bump, fp=fp
+                        )
+                    n_outliers = self.masks[name].size - self.masks[name].sum()
+                    if n_outliers > 0:
+                        print(f'clipped {n_outliers} outlier(s)')
+                        clipped = True
         pickle.dump(self.masks, open(os.path.join(self.outdir, 'mask.pkl'), 'wb'))
         if clipped:
             self.build_model(start=self.map_soln, force=True)
@@ -420,3 +422,21 @@ class TransitFit:
                 f.write(f'{ic} {val:.2f}\n')
         if self.clobber:
             pass
+        self.save_corrected()
+
+    def save_corrected(self, subtract_tc=False):
+        print('saving corrected light curves')
+        soln = self.map_soln
+        nplanets = self.nplanets
+        for i,(name,data) in enumerate(self.data.items()):
+            mask = self.masks[name]
+            cor = util.get_corrected(data, name, soln, nplanets, mask=mask, subtract_tc=subtract_tc)
+            x = cor['x'] + self.ref_time
+            y = cor['y'] * 1e-3
+            yerr = cor['yerr'] * 1e-3
+            y += 1
+            prefix = os.path.basename(self.wd)
+            fn = f'{prefix}-{name}-cor.csv'
+            fp = os.path.join(self.outdir,fn)
+            pd.DataFrame(dict(x=x,y=y,yerr=yerr)).to_csv(fp, index=False)
+            print(f'created file: {fp}')
