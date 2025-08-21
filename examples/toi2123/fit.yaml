@@ -4,15 +4,15 @@ data:
     band: T
     trend: 1
     spline: true
-    spline_knots: 5
-    trim_beg: 0.04
-    trim_end: 0.04
+    spline_knots: 3
+    trim_beg: 0.06
+    trim_end: 0.06
 planets: b
 tc_pred: 2458990.82
 tc_pred_unc: 0.06
 uniform:
-  ror: [0.01,0.05]
+  ror: [0.03,0.06]
   b: [0,1]
 clobber: True
-# tune: 100
-# draws: 100
+tune: 100
+draws: 100

@@ -56,7 +56,7 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
                     var_names += [f'ror_{band}_{i+1}' for i in range(nplanets)]
                 else:
                     var_names += [f'ror_{band}']
-                trace_ = np.c_[trace_, trace.posterior[f'ror_{band}'].values.copy()]
+                trace_ = np.c_[trace_, trace.posterior[f'ror_{band}'].values.reshape(-1, nplanets)]
                 truths = np.append(truths, soln[f'ror_{band}'])
         else:
             var_names += [f'ror_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['ror']
