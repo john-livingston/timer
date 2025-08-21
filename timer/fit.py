@@ -304,8 +304,10 @@ class TransitFit:
                     map_soln, use_gp = self.map_soln, self.use_gp,
                     clip_nsig = self.fit_params['data'][name].get('clip_nsig', 7)
                     if fn is None:
-                        fn = f'{name}-outliers.png'
-                    fp = os.path.join(self.outdir, fn)
+                        current_fn = f'{name}-outliers.png'
+                    else:
+                        current_fn = fn
+                    fp = os.path.join(self.outdir, current_fn)
                     self.masks[name] = util.get_outlier_mask(
                         x, y, name, map_soln, use_gp,
                         nsig=clip_nsig, include_flare=include_flare, include_bump=include_bump, fp=fp
