@@ -36,7 +36,7 @@ data:
 planets: b
 tc_pred: 2460641.823095
 tc_pred_unc: 0.1
-chromatic: false
+chromatic: true
 uniform:
   ror: [0.01,0.1]
   b: [0,1]

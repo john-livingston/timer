@@ -354,6 +354,9 @@ class TransitFit:
         #     self.plot(name, fn=fn)
         if plot_fit:
             self.plot_multi(fn='fit.png')
+            if self.chromatic:
+                fig = plot.plot_chromatic_ror(self.trace, self.bands, nplanets=self.nplanets)
+                fig.savefig(os.path.join(self.outdir, 'chromatic_ror.png'), dpi=300, bbox_inches='tight')
         if plot_systematics:
             for name in self.data.keys():
                 self.plot_systematics(name, fn=f'sys-{name}.png')
