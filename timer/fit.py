@@ -50,11 +50,12 @@ defaults = dict(
 
 class TransitFit:
 
-    def __init__(self, sys_params, fit_params, wd='.', outdir='out'):
+    def __init__(self, sys_params, fit_params, wd='.', outdir='out', _force_load_saved=False):
         self.sys_params = sys_params
         self.fit_params = fit_params
         self.wd = os.path.abspath(wd)
         self.outdir = os.path.join(self.wd, outdir)
+        self._force_load_saved = _force_load_saved
         self.validate()
         self.setup()
         self.load_data()
@@ -67,7 +68,7 @@ class TransitFit:
         fit_params = yaml.load(open(fp), Loader=yaml.FullLoader)
         fp = os.path.join(wd, 'sys.yaml')
         sys_params = yaml.load(open(fp), Loader=yaml.FullLoader)
-        return cls(sys_params, fit_params, wd=wd, outdir=outdir)
+        return cls(sys_params, fit_params, wd=wd, outdir=outdir, _force_load_saved=True)
 
     def validate(self):
         
@@ -165,7 +166,8 @@ class TransitFit:
     def load_saved(self):
         if not os.path.exists(self.outdir):
             os.mkdir(self.outdir)
-        if not self.clobber:
+        # Load saved files if clobber is False OR if force_load_saved is True (from from_dir)
+        if not self.clobber or self._force_load_saved:
             if os.path.exists(os.path.join(self.outdir, 'mask.pkl')):
                 print('loading mask(s) from mask.pkl')
                 self.masks = pickle.load(open(os.path.join(self.outdir, 'mask.pkl'), 'rb'))
