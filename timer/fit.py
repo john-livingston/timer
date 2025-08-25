@@ -13,10 +13,10 @@ from . import io, util, plot, model
 defaults = dict(
 
     model = dict(
-        fixed = ['period', 'u_star'], # m_star r_star t0 period ror b dur u_star
+        fixed = [], # transit model parameters (duration basis): m_star r_star t0 period ror b dur u_star
         fit_basis = 'duration',
         chromatic = False,
-        include_mean = True,
+        include_mean = True, # the mean flux value (should not be True if add_bias=True)
         include_flare = False,
         include_bump = False,
         use_gp = False,
@@ -33,7 +33,7 @@ defaults = dict(
     data = dict(
         spline = False,
         spline_knots = 5,
-        add_bias = False,
+        add_bias = False, # the column of 1s in the design matrix
         quadratic = False,
         trend = None,
         trim_beg = None,
