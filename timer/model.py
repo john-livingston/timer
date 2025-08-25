@@ -176,14 +176,27 @@ def build(
                 if 'u_star' in fixed:
                     v[p] = priors['u_star'][band]
                 else:
-                    v[p] = get_rv(
-                        name=p,
-                        dist='gaussian',
-                        shape=2,
-                        mu=priors['u_star'][band],
-                        sd=priors['u_star_unc'][band],
-                        verbose=verbose
-                    )
+                    if priors['u_star_prior'] == 'uniform':
+                        # For uniform priors, calculate bounds directly
+                        bounds = np.array([0, 1])  # u_star bounds from fit.yaml
+                        lower = bounds[0]
+                        upper = bounds[1]
+                        initval = priors['u_star_initval'][band] if 'u_star_initval' in priors else priors['u_star'][band]
+                        v[p] = pm.Uniform(p, lower=lower, upper=upper, shape=2, initval=initval)
+                        if verbose:
+                            print(f'{p} ~ uniform({lower},{upper})')
+                    else:
+                        # For Gaussian priors, use the original approach
+                        initval = priors['u_star_initval'][band] if 'u_star_initval' in priors else priors['u_star'][band]
+                        v[p] = get_rv(
+                            name=p,
+                            dist=priors['u_star_prior'],
+                            shape=2,
+                            mu=priors['u_star'][band],
+                            sd=priors['u_star_unc'][band],
+                            initval=initval,
+                            verbose=verbose
+                        )
             else:
                 v[p] = xo.QuadLimbDark(p)
             v[f'star_{band}'] = xo.LimbDarkLightCurve(v[p])

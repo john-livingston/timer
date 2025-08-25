@@ -121,6 +121,14 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
     ldp = [ld.claret(band, *star['teff'], *star['logg'], *star['feh']) for band in bands_]
     priors['u_star'] = {band:ld[::2] for band,ld in zip(bands, ldp)}
     priors['u_star_unc'] = {band:ld[1::2] for band,ld in zip(bands, ldp)}
+    if 'u_star' in uniform:
+        priors['u_star_prior'] = 'uniform'
+        bounds = np.array(uniform['u_star'])
+        priors['u_star_unc'] = {band:bounds[1] - bounds[0] for band in bands}
+        priors['u_star_initval'] = priors['u_star']
+        priors['u_star'] = {band:(bounds[0] + bounds[1]) / 2 for band in bands}
+    else:
+        priors['u_star_prior'] = 'gaussian'
 
     for par in 'period dur ror b'.split():
         # Always store the original mean value from sys.yaml
