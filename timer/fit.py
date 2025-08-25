@@ -1,6 +1,7 @@
 import os
 import dill as pickle
 import re
+import yaml
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -60,6 +61,14 @@ class TransitFit:
         self.load_saved()
         self.set_priors()
         
+    @classmethod
+    def from_dir(cls, wd, outdir='out'):
+        fp = os.path.join(wd, 'fit.yaml')
+        fit_params = yaml.load(open(fp), Loader=yaml.FullLoader)
+        fp = os.path.join(wd, 'sys.yaml')
+        sys_params = yaml.load(open(fp), Loader=yaml.FullLoader)
+        return cls(sys_params, fit_params, wd=wd, outdir=outdir)
+
     def validate(self):
         
         # set model defaults
