@@ -204,8 +204,6 @@ class TransitFit:
             tc_guess, tc_guess_unc, uniform=self.uniform
         )
         if self.include_flare:
-            # lower = min([self.data[k]['x'].min() for k in self.data.keys()])
-            # upper = max([self.data[k]['x'].max() for k in self.data.keys()])
             for p in 'tpeak fwhm ampl'.split():
                 self.priors[f'flare_{p}'] = self.flare[p]
                 self.priors[f'flare_{p}_prior'] = self.flare[f'{p}_prior']
@@ -359,12 +357,10 @@ class TransitFit:
         self.summary.to_csv(os.path.join(self.outdir, 'summary.csv'))
 
         soln, logp = util.get_map_soln(self.trace)
+        print(f"Max. log probability after sampling: {logp:.2f}")
         self.map_soln = soln
         pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
             
-        # for name in self.data.keys():
-        #     fn = f'fit-{name}.png'
-        #     self.plot(name, fn=fn)
         if plot_fit:
             self.plot_multi(fn='fit.png')
             if self.chromatic:

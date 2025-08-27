@@ -138,7 +138,7 @@ def sample(
         trace = pm.sample(
             tune=tune,
             draws=draws,
-            start=map_soln,
+            initvals=map_soln,
             cores=cores,
             chains=chains,
             target_accept=0.95,
@@ -160,7 +160,9 @@ def build(
     include_flare=False,
     include_bump=False,
     fixed=[],
-    verbose=False
+    verbose=False,
+    logp_threshold=1,
+    sequential_opt=True
 ):
 
     with pm.Model() as model:
@@ -424,41 +426,55 @@ def build(
         if start is None:
             start = model.initial_point()
 
-        # all
-        map_soln = pm.find_MAP(start=start, method='Newton-CG')
+        # Get initial log probability - filter to only include value variables
+        start_filtered = {k: v for k, v in start.items() if k in [var.name for var in model.value_vars]}
+        logp_init = model.point_logps(start_filtered)
+        
+        # optimize all parameters
+        map_soln = pm.find_MAP(start=start)
 
-        # # lm
-        # map_soln = pm.find_MAP(
-        #     start=map_soln, vars=[parameters[name] for name in datasets.keys()]
-        # )
+        # Get final log probability after MAP optimization - filter to only include value variables
+        map_soln_filtered = {k: v for k, v in map_soln.items() if k in [var.name for var in model.value_vars]}
+        logp_final = model.point_logps(map_soln_filtered)
+        
+        # Sum up the individual log probabilities to get total
+        logp_init_total = sum(logp_init.values())
+        logp_final_total = sum(logp_final.values())
+        
+        print(f"Initial log probability: {logp_init_total:.2f}")
+        print(f"Final log probability: {logp_final_total:.2f}")
+        print(f"Log probability improvement: {logp_final_total - logp_init_total:.2f}")
+        
+        if sequential_opt and (logp_final_total - logp_init_total < logp_threshold):
+            print("Optimization improvement below threshold. Attempting sequential optimization.")
 
-        # # transit
-        # pnames = [i for i in 't0 b dur'.split() if i not in fixed]
-        # if 'ror' not in fixed:
-        #     if chromatic:
-        #         pnames += [f'ror_{band}' for band in bands]
-        #     else:
-        #         pnames += ['ror']
-        # map_soln = pm.find_MAP(
-        #     start=map_soln, vars=[v[p] for p in pnames]
-        # )
+            # only linear systematics model
+            map_soln = pm.find_MAP(
+                start=map_soln, vars=[parameters[name] for name in datasets.keys()]
+            )
 
-        # # noise
-        # map_soln = pm.find_MAP(
-        #     start=map_soln, vars=[parameters[f'{name}_noise'] for name in datasets.keys()]
-        # )
+            # only transit
+            pnames = [i for i in 't0 b dur'.split() if i not in fixed]
+            if 'ror' not in fixed:
+                if chromatic:
+                    pnames += [f'ror_{band}' for band in bands]
+                else:
+                    pnames += ['ror']
+            map_soln = pm.find_MAP(
+                start=map_soln, vars=[v[p] for p in pnames]
+            )
 
-        # # sequential optimization
-        # pnames = 't0 dur b'.split()
-        # for p in [i for i in pnames if i not in fixed]:
-        #     map_soln = pm.find_MAP(start=map_soln, vars=[v[p]])
+            # only noise
+            map_soln = pm.find_MAP(
+                start=map_soln, vars=[parameters[f'{name}_noise'] for name in datasets.keys()]
+            )
 
-        # # simultaneous optimization
-        # map_soln = pm.find_MAP(
-        #     start=map_soln, vars=[v[p] for p in pnames]
-        # )
+            # # sequential transit parameter optimization
+            # pnames = 't0 dur b'.split()
+            # for p in [i for i in pnames if i not in fixed]:
+            #     map_soln = pm.find_MAP(start=map_soln, vars=[v[p]])
 
-        # # simultaneous optimization of all parameters
-        # map_soln = pm.find_MAP(start=map_soln)
+            # final optimization of all parameters
+            map_soln = pm.find_MAP(start=map_soln)
 
     return model, map_soln
