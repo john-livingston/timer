@@ -437,6 +437,88 @@ class TransitFit:
         plt.tight_layout()
         plt.savefig(os.path.join(self.outdir, fn))
         
+    def save_posterior_samples(self, filename='posterior_samples.csv.gz'):
+        """
+        Save posterior samples to a compressed CSV file.
+        
+        Parameters:
+        -----------
+        filename : str
+            Name of the output file (default: 'posterior_samples.csv.gz')
+        """
+        print('saving posterior samples to CSV.gz')
+        
+        # Extract flattened samples from trace
+        flat_samps = self.trace.posterior.stack(sample=("chain", "draw"))
+        
+        # Get sample stats (log probability, etc.)
+        flat_stats = self.trace.sample_stats.stack(sample=("chain", "draw"))
+        
+        # Get number of samples
+        n_samples = len(flat_samps.coords['sample'])
+        
+        # Initialize data dictionary
+        data_dict = {}
+        
+        # Add chain and draw indices
+        data_dict['chain'] = flat_samps.coords['chain'].values
+        data_dict['draw'] = flat_samps.coords['draw'].values
+        
+        # Add log probability
+        if 'lp' in flat_stats.data_vars:
+            data_dict['log_probability'] = flat_stats['lp'].values
+        
+        # Add all posterior samples
+        for var_name, var_data in flat_samps.data_vars.items():
+            values = var_data.values
+            
+            # Skip large arrays that are not typically needed for analysis
+            # (light curves, linear model predictions, etc.)
+            if var_name.endswith(('_light_curves', '_light_curves_hr', '_lc_pred', '_lm')):
+                continue
+            
+            # Handle different array shapes
+            if values.ndim == 1:
+                # 1D array: (n_samples,)
+                data_dict[var_name] = values
+            elif values.ndim == 2:
+                # 2D array: could be (n_params, n_samples) or (n_samples, n_params)
+                if values.shape[0] == n_samples:
+                    # Shape is (n_samples, n_params)
+                    for i in range(values.shape[1]):
+                        data_dict[f'{var_name}_{i}'] = values[:, i]
+                elif values.shape[1] == n_samples:
+                    # Shape is (n_params, n_samples) - transpose needed
+                    for i in range(values.shape[0]):
+                        data_dict[f'{var_name}_{i}'] = values[i, :]
+                else:
+                    print(f'Warning: Skipping variable {var_name} with unexpected shape {values.shape}')
+                    continue
+            elif values.ndim == 3:
+                # 3D array: typically (n_data, n_params, n_samples)
+                if values.shape[2] == n_samples:
+                    # Skip 3D arrays as they're typically large data arrays
+                    print(f'Skipping 3D variable {var_name} (shape: {values.shape})')
+                    continue
+                else:
+                    print(f'Warning: Skipping variable {var_name} with unexpected shape {values.shape}')
+                    continue
+            else:
+                print(f'Warning: Skipping variable {var_name} with {values.ndim}D shape {values.shape}')
+                continue
+        
+        # Create DataFrame
+        df = pd.DataFrame(data_dict)
+        
+        # Save to compressed CSV
+        output_path = os.path.join(self.outdir, filename)
+        df.to_csv(output_path, index=False, compression='gzip')
+        
+        print(f'Posterior samples saved to: {output_path}')
+        print(f'Shape: {df.shape[0]} samples × {df.shape[1]} parameters')
+        
+        return output_path
+
     def save_results(self):
         print('saving results')
         flat_samps = self.trace.posterior.stack(sample=("chain", "draw"))
@@ -457,6 +539,7 @@ class TransitFit:
                 f.write(f'{ic} {val:.2f}\n')
         if self.clobber:
             pass
+        self.save_posterior_samples()
         self.save_corrected()
 
     def save_corrected(self, subtract_tc=False):
