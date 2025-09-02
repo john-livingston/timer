@@ -7,6 +7,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import arviz as az
 from astropy.time import Time
+import logging
+import argparse
+import shutil
 
 from . import io, util, plot, model
 
@@ -58,6 +61,7 @@ class TransitFit:
         self._force_load_saved = _force_load_saved
         self.validate()
         self.setup()
+        self.save_input_files()
         self.load_data()
         self.load_saved()
         self.set_priors()
@@ -75,20 +79,20 @@ class TransitFit:
         # set model defaults
         for k,v in defaults['model'].items():
             if k not in self.fit_params.keys():
-                print(f'setting default: {k} = {v}')
+                logging.info(f'setting default: {k} = {v}')
                 self.fit_params[k] = v
         
         # set sampler defaults
         for k,v in defaults['sampler'].items():
             if k not in self.fit_params.keys():
-                print(f'setting default: {k} = {v}')
+                logging.info(f'setting default: {k} = {v}')
                 self.fit_params[k] = v
 
         # set data defaults
         for k,v in defaults['data'].items():
             for n in self.fit_params['data'].keys():
                 if k not in self.fit_params['data'][n].keys():
-                    print(f'setting default for {n}: {k} = {v}')
+                    logging.info(f'setting default for {n}: {k} = {v}')
                     self.fit_params['data'][n][k] = v
 
     def setup(self):
@@ -120,6 +124,25 @@ class TransitFit:
         self.masks = {}
         self.bands = []
 
+    def save_input_files(self):
+        """Save input YAML files to output directory for audit purposes."""
+        if not os.path.exists(self.outdir):
+            os.makedirs(self.outdir, exist_ok=True)
+        
+        # Copy fit.yaml and sys.yaml to output directory
+        fit_yaml_src = os.path.join(self.wd, 'fit.yaml')
+        sys_yaml_src = os.path.join(self.wd, 'sys.yaml')
+        
+        if os.path.exists(fit_yaml_src):
+            fit_yaml_dst = os.path.join(self.outdir, 'fit.yaml')
+            shutil.copy2(fit_yaml_src, fit_yaml_dst)
+            logging.info(f'Saved input file: {fit_yaml_dst}')
+        
+        if os.path.exists(sys_yaml_src):
+            sys_yaml_dst = os.path.join(self.outdir, 'sys.yaml')
+            shutil.copy2(sys_yaml_src, sys_yaml_dst)
+            logging.info(f'Saved input file: {sys_yaml_dst}')
+
     def load_data(self):
         self.data = {}
         data = self.fit_params['data']
@@ -149,9 +172,9 @@ class TransitFit:
                 chunk_thresh=data[n]['chunk_thresh'],
             )
             data_iso = [Time(i+ref_time, format='jd').iso for i in (x.min(), x.max())]
-            print(f'loading data: {fn}')
-            print(f'data span: {data_iso[0]} - {data_iso[1]}')
-            print(f'ref. time: {ref_time}')
+            logging.info(f'loading data: {fn}')
+            logging.info(f'data span: {data_iso[0]} - {data_iso[1]}')
+            logging.info(f'ref. time: {ref_time}')
             self.data[n] = dict(x=x, y=y, yerr=yerr, X=X, texp=texp, x_hr=x_hr, band=b, ref_time=ref_time)
             self.masks[n] = None
         ref_times = [v['ref_time'] for k,v in self.data.items()]
@@ -169,20 +192,20 @@ class TransitFit:
         # Load saved files if clobber is False OR if force_load_saved is True (from from_dir)
         if not self.clobber or self._force_load_saved:
             if os.path.exists(os.path.join(self.outdir, 'mask.pkl')):
-                print('loading mask(s) from mask.pkl')
+                logging.info('loading mask(s) from mask.pkl')
                 self.masks = pickle.load(open(os.path.join(self.outdir, 'mask.pkl'), 'rb'))
             if os.path.exists(os.path.join(self.outdir, 'model.pkl')):
-                print('loading model from model.pkl')
+                logging.info('loading model from model.pkl')
                 self.model = pickle.load(open(os.path.join(self.outdir, 'model.pkl'), 'rb'))
             if os.path.exists(os.path.join(self.outdir, 'map.pkl')):
-                print('loading MAP solution from map.pkl')
+                logging.info('loading MAP solution from map.pkl')
                 self.map_soln = pickle.load(open(os.path.join(self.outdir, 'map.pkl'), 'rb'))
             if os.path.exists(os.path.join(self.outdir, 'trace.pkl')):
-                print('loading trace from trace.pkl')
+                logging.info('loading trace from trace.pkl')
                 self.trace = pickle.load(open(os.path.join(self.outdir, 'trace.pkl'), 'rb'))
 
     def plot_data(self):
-        print("plotting data")
+        logging.info("plotting data")
         for name,data in self.data.items():
             x, y, yerr = [data.get(i) for i in 'x y yerr'.split()]
             ref_time = data['ref_time']
@@ -220,7 +243,7 @@ class TransitFit:
 
     def build_model(self, start=None, force=False, verbose=False, plot=True):
         if force or self.clobber or self.model is None:
-            print('building and optimizing model')
+            logging.info('building and optimizing model')
             data, priors, masks = self.data, self.priors, self.masks
             nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
             fixed, fit_basis = self.fixed, self.fit_basis
@@ -230,7 +253,7 @@ class TransitFit:
                 masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, include_bump=include_bump,
                 verbose=verbose
             )
-            print(self.model)
+            logging.info(f"Model: {self.model}")
             pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
             pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
         # for name in self.data.keys():
@@ -323,7 +346,7 @@ class TransitFit:
                         )
                     n_outliers = self.masks[name].size - self.masks[name].sum()
                     if n_outliers > 0:
-                        print(f'clipped {n_outliers} outlier(s)')
+                        logging.info(f'clipped {n_outliers} outlier(s)')
                         clipped = True
         pickle.dump(self.masks, open(os.path.join(self.outdir, 'mask.pkl'), 'wb'))
         if clipped:
@@ -336,7 +359,7 @@ class TransitFit:
             draws = self.draws
             chains = self.chains
             cores = self.cores
-            print(f'sampling for {tune} tuning steps and {draws} draws with {chains} chains on {cores} cores')
+            logging.info(f'sampling for {tune} tuning steps and {draws} draws with {chains} chains on {cores} cores')
             self.trace = model.sample(
                 self.model, 
                 self.map_soln,
@@ -352,12 +375,12 @@ class TransitFit:
                 self.trace, self.data, self.bands, self.fit_basis, self.use_gp, self.fixed,
                 chromatic=self.chromatic
             )
-            print('r_hat max:', self.summary['r_hat'].max())
+            logging.info(f'r_hat max: {self.summary["r_hat"].max()}')
             
         self.summary.to_csv(os.path.join(self.outdir, 'summary.csv'))
 
         soln, logp = util.get_map_soln(self.trace)
-        print(f"Max. log probability after sampling: {logp:.2f}")
+        logging.info(f"Max. log probability after sampling: {logp:.2f}")
         self.map_soln = soln
         pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
             
@@ -376,11 +399,11 @@ class TransitFit:
             map_soln = self.map_soln
             use_gp = self.use_gp
             resid = util.get_residuals(name, y, map_soln, mask=mask, use_gp=use_gp)
-            print(f"{name} residual scatter: {resid.std()*1e3 :.0f} ppm")
+            logging.info(f"{name} residual scatter: {resid.std()*1e3 :.0f} ppm")
         
     def plot_corner(self, sigma_lc=True, include_flare=True, include_bump=True, fn=None):
 
-        print('generating corner plot')
+        logging.info('generating corner plot')
         fig = plot.corner(
             self.trace,
             self.map_soln,
@@ -454,83 +477,175 @@ class TransitFit:
             print(f'created file: {fp}')
 
 
+def setup_logging(outdir, verbose=False):
+    """Configure logging to file and optionally to console."""
+    # Create log file path
+    log_file = os.path.join(outdir, 'timer-fit.log')
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Configure root logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # Clear any existing handlers
+    logger.handlers.clear()
+    
+    # File handler - always log everything to file
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # Console handler - only if verbose
+    if verbose:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    
+    return log_file
+
+
 def cli():
     """Command-line interface for timer transit fitting."""
-    import sys
     import time
     import matplotlib.pyplot as plt
     plt.rcParams['figure.dpi'] = 150
 
-    # Handle help and usage
-    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help', 'help']:
-        print("Usage: timer-fit <working_directory>")
-        print("")
-        print("Arguments:")
-        print("  working_directory     Directory containing fit.yaml, sys.yaml, and data files")
-        print("")
-        print("Examples:")
-        print("  timer-fit examples/toi2123")
-        print("  timer-fit examples/250801-muscat3")
-        print("")
-        print("The working directory must contain both 'fit.yaml' and 'sys.yaml' files.")
-        sys.exit(0 if len(sys.argv) > 1 and sys.argv[1] in ['-h', '--help', 'help'] else 1)
+    # Set up argument parser
+    parser = argparse.ArgumentParser(
+        description='Timer transit fitting tool',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  timer-fit examples/toi2123
+  timer-fit examples/250801-muscat3 -v
+  timer-fit examples/v1298tau-m2 --verbose
 
-    # Check for extra arguments
-    if len(sys.argv) > 2:
-        print("Error: Too many arguments. Only the working directory is required.")
-        print("Both fit.yaml and sys.yaml must be in the working directory.")
-        sys.exit(1)
-
-    tick = time.time()
-
-    wd = sys.argv[1]
+The working directory must contain both 'fit.yaml' and 'sys.yaml' files.
+        """
+    )
+    
+    parser.add_argument(
+        'working_directory',
+        help='Directory containing fit.yaml, sys.yaml, and data files'
+    )
+    
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Enable verbose output to console (default: minimal console output)'
+    )
+    
+    # Parse arguments
+    args = parser.parse_args()
+    wd = args.working_directory
+    verbose = args.verbose
     
     # Check if working directory exists
     if not os.path.isdir(wd):
         print(f"Error: Working directory '{wd}' does not exist.")
-        sys.exit(1)
+        return 1
     
     # Check for fit.yaml
     fit_yaml_path = os.path.join(wd, 'fit.yaml')
     if not os.path.isfile(fit_yaml_path):
         print(f"Error: fit.yaml not found in '{wd}'")
-        sys.exit(1)
+        return 1
     
     # Check for sys.yaml
     sys_yaml_path = os.path.join(wd, 'sys.yaml')
     if not os.path.isfile(sys_yaml_path):
         print(f"Error: sys.yaml not found in '{wd}'")
         print("Both fit.yaml and sys.yaml are required in the working directory.")
-        sys.exit(1)
+        return 1
+    
+    # Create output directory early to set up logging
+    outdir = os.path.join(wd, 'out')
+    if not os.path.exists(outdir):
+        os.makedirs(outdir, exist_ok=True)
+    
+    # Set up logging
+    log_file = setup_logging(outdir, verbose=verbose)
+    
+    # Log startup information
+    logging.info(f"Timer-fit started")
+    logging.info(f"Working directory: {wd}")
+    logging.info(f"Output directory: {outdir}")
+    logging.info(f"Verbose mode: {verbose}")
+    logging.info(f"Log file: {log_file}")
+    
+    # Minimal console output unless verbose
+    if not verbose:
+        print(f"Timer-fit starting (log: {log_file})")
+    
+    tick = time.time()
     
     # Load configuration files
     try:
         fit_params = yaml.load(open(fit_yaml_path), Loader=yaml.FullLoader)
+        logging.info("Loaded fit.yaml successfully")
     except Exception as e:
-        print(f"Error loading fit.yaml: {e}")
-        sys.exit(1)
+        error_msg = f"Error loading fit.yaml: {e}"
+        logging.error(error_msg)
+        print(error_msg)
+        return 1
 
     try:
         sys_params = yaml.load(open(sys_yaml_path), Loader=yaml.FullLoader)
+        logging.info("Loaded sys.yaml successfully")
     except Exception as e:
-        print(f"Error loading sys.yaml: {e}")
-        sys.exit(1)
+        error_msg = f"Error loading sys.yaml: {e}"
+        logging.error(error_msg)
+        print(error_msg)
+        return 1
 
     try:
+        logging.info("Initializing TransitFit")
         fit = TransitFit(sys_params, fit_params, wd=wd)
+        
+        logging.info("Plotting data")
         fit.plot_data()
+        
+        logging.info("Building model")
         fit.build_model(verbose=True)
+        
+        logging.info("Clipping outliers")
         fit.clip_outliers()
+        
+        logging.info("Sampling")
         fit.sample()
+        
+        logging.info("Generating corner plot")
         fit.plot_corner()
+        
+        logging.info("Generating trace plot")
         fit.plot_trace()
+        
+        logging.info("Saving results")
         fit.save_results()
 
-        print(f'elapsed time: {time.time()-tick :.0f} seconds')
+        elapsed = time.time() - tick
+        success_msg = f'Timer-fit completed successfully in {elapsed:.0f} seconds'
+        logging.info(success_msg)
+        
+        if not verbose:
+            print(success_msg)
+        
+        return 0
+        
     except Exception as e:
-        print(f"Error during fitting: {e}")
-        sys.exit(1)
+        error_msg = f"Error during fitting: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(error_msg)
+        return 1
 
 
 if __name__ == '__main__':
-    cli()
+    import sys
+    sys.exit(cli())

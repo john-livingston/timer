@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "timer"
+version = "0.1.1"
+description = "Transit fitting analysis package"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    {name = "John Livingston", email = "john.livingston@nao.ac.jp"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "pyyaml",
+    "pymc",
+    "astropy",
+    "patsy",
+    "exoplanet",
+    "exoplanet-core",
+    "dill",
+    "corner",
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "arviz",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "flake8",
+]
+
+[project.scripts]
+timer-fit = "timer.fit:cli"
+
+[project.urls]
+Homepage = "https://gitlab.com/john-livingston/timer"
+Repository = "https://gitlab.com/john-livingston/timer.git"
+Issues = "https://gitlab.com/john-livingston/timer/-/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["timer*"]
+
+[tool.setuptools.package-data]
+timer = ["*.yaml", "*.yml"]
