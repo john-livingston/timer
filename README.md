@@ -28,9 +28,10 @@ After installation, you can use the command-line interface:
 
     timer-fit examples/toi2123
 
-Or specify a custom system parameters file:
+The working directory must contain both `fit.yaml` and `sys.yaml` files. Additional examples:
 
-    timer-fit examples/toi2123 examples/toi2123/sys.yaml
+    timer-fit examples/250801-muscat3
+    timer-fit examples/v1298tau-m2
 
 ## Dependencies
 
