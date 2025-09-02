@@ -452,3 +452,97 @@ class TransitFit:
             fp = os.path.join(self.outdir,fn)
             pd.DataFrame(dict(x=x,y=y,yerr=yerr)).to_csv(fp, index=False)
             print(f'created file: {fp}')
+
+
+def cli():
+    """Command-line interface for timer transit fitting."""
+    import sys
+    import time
+    import matplotlib.pyplot as plt
+    plt.rcParams['figure.dpi'] = 150
+
+    # Handle help and usage
+    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help', 'help']:
+        print("Usage: timer-fit <working_directory> [system_params_file]")
+        print("")
+        print("Arguments:")
+        print("  working_directory     Directory containing fit.yaml and data files")
+        print("  system_params_file    Optional path to system parameters file (default: sys.yaml)")
+        print("")
+        print("Examples:")
+        print("  timer-fit examples/toi2123")
+        print("  timer-fit examples/toi2123 examples/toi2123/sys.yaml")
+        print("")
+        print("The working directory must contain a 'fit.yaml' file.")
+        print("If no system_params_file is specified, the command will look for:")
+        print("  1. 'sys.yaml' in the current directory")
+        print("  2. 'sys.yaml' in the working directory")
+        sys.exit(0 if len(sys.argv) > 1 and sys.argv[1] in ['-h', '--help', 'help'] else 1)
+
+    tick = time.time()
+
+    wd = sys.argv[1]
+    
+    # Check if working directory exists
+    if not os.path.isdir(wd):
+        print(f"Error: Working directory '{wd}' does not exist.")
+        sys.exit(1)
+    
+    # Check for fit.yaml
+    fp = os.path.join(wd, 'fit.yaml')
+    if not os.path.isfile(fp):
+        print(f"Error: fit.yaml not found in '{wd}'")
+        sys.exit(1)
+    
+    try:
+        fit_params = yaml.load(open(fp), Loader=yaml.FullLoader)
+    except Exception as e:
+        print(f"Error loading fit.yaml: {e}")
+        sys.exit(1)
+
+    # Load system parameters
+    if len(sys.argv) > 2:
+        fp = sys.argv[2]
+        if not os.path.isfile(fp):
+            print(f"Error: System parameters file '{fp}' does not exist.")
+            sys.exit(1)
+        try:
+            sys_params = yaml.load(open(fp), Loader=yaml.FullLoader)
+        except Exception as e:
+            print(f"Error loading system parameters file: {e}")
+            sys.exit(1)
+    elif os.path.isfile('sys.yaml'):
+        try:
+            sys_params = yaml.load(open('sys.yaml'), Loader=yaml.FullLoader)
+        except Exception as e:
+            print(f"Error loading sys.yaml: {e}")
+            sys.exit(1)
+    else:
+        fp = os.path.join(wd, 'sys.yaml')
+        if not os.path.isfile(fp):
+            print(f"Error: sys.yaml not found in current directory or '{wd}'")
+            sys.exit(1)
+        try:
+            sys_params = yaml.load(open(fp), Loader=yaml.FullLoader)
+        except Exception as e:
+            print(f"Error loading sys.yaml: {e}")
+            sys.exit(1)
+
+    try:
+        fit = TransitFit(sys_params, fit_params, wd=wd)
+        fit.plot_data()
+        fit.build_model(verbose=True)
+        fit.clip_outliers()
+        fit.sample()
+        fit.plot_corner()
+        fit.plot_trace()
+        fit.save_results()
+
+        print(f'elapsed time: {time.time()-tick :.0f} seconds')
+    except Exception as e:
+        print(f"Error during fitting: {e}")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    cli()
