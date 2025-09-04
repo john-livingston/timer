@@ -609,6 +609,8 @@ Examples:
   timer-fit examples/toi2123
   timer-fit examples/250801-muscat3 -v
   timer-fit examples/v1298tau-m2 --verbose
+  timer-fit examples/toi2123 -o model1
+  timer-fit examples/toi2123 --outdir model2
 
 The working directory must contain both 'fit.yaml' and 'sys.yaml' files.
         """
@@ -625,10 +627,17 @@ The working directory must contain both 'fit.yaml' and 'sys.yaml' files.
         help='Enable verbose output to console (default: minimal console output)'
     )
     
+    parser.add_argument(
+        '-o', '--outdir',
+        default='out',
+        help='Output directory name (default: out)'
+    )
+    
     # Parse arguments
     args = parser.parse_args()
     wd = args.working_directory
     verbose = args.verbose
+    outdir = args.outdir
     
     # Check if working directory exists
     if not os.path.isdir(wd):
@@ -649,17 +658,17 @@ The working directory must contain both 'fit.yaml' and 'sys.yaml' files.
         return 1
     
     # Create output directory early to set up logging
-    outdir = os.path.join(wd, 'out')
-    if not os.path.exists(outdir):
-        os.makedirs(outdir, exist_ok=True)
+    outdir_path = os.path.join(wd, outdir)
+    if not os.path.exists(outdir_path):
+        os.makedirs(outdir_path, exist_ok=True)
     
     # Set up logging
-    log_file = setup_logging(outdir, verbose=verbose)
+    log_file = setup_logging(outdir_path, verbose=verbose)
     
     # Log startup information
     logging.info(f"Timer-fit started")
     logging.info(f"Working directory: {wd}")
-    logging.info(f"Output directory: {outdir}")
+    logging.info(f"Output directory: {outdir_path}")
     logging.info(f"Verbose mode: {verbose}")
     logging.info(f"Log file: {log_file}")
     
@@ -690,7 +699,7 @@ The working directory must contain both 'fit.yaml' and 'sys.yaml' files.
 
     try:
         logging.info("Initializing TransitFit")
-        fit = TransitFit(sys_params, fit_params, wd=wd)
+        fit = TransitFit(sys_params, fit_params, wd=wd, outdir=outdir)
         
         logging.info("Plotting data")
         fit.plot_data()
