@@ -389,6 +389,7 @@ class TransitFit:
             if self.chromatic:
                 fig = plot.plot_chromatic_ror(self.trace, self.bands, nplanets=self.nplanets)
                 fig.savefig(os.path.join(self.outdir, 'chromatic_ror.png'), dpi=300, bbox_inches='tight')
+            self.plot_limb_darkening()
         if plot_systematics:
             for name in self.data.keys():
                 self.plot_systematics(name, fn=f'sys-{name}.png')
@@ -435,6 +436,17 @@ class TransitFit:
         if fn is None:
             fn = 'trace.png'
         plt.tight_layout()
+        plt.savefig(os.path.join(self.outdir, fn))
+
+    def plot_limb_darkening(self, fn=None):
+        if 'u_star' in self.fixed:
+            print('Limb darkening parameters are fixed - skipping plot')
+            return
+        
+        print('generating limb darkening plot')
+        fig = plot.limb_darkening(self.trace, self.priors, self.bands)
+        if fn is None:
+            fn = 'limb_darkening.png'
         plt.savefig(os.path.join(self.outdir, fn))
         
     def save_posterior_samples(self, filename='posterior_samples.csv.gz'):

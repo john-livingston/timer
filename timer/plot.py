@@ -423,3 +423,48 @@ def systematics(fit, name, style=1):
         fig.tight_layout()
 
     return fig
+
+def limb_darkening(trace, priors, bands):
+    import arviz as az
+    import scipy.stats as st
+    
+    samples = az.extract(trace.posterior)
+    
+    n_bands = len(bands)
+    figsize = (2 * n_bands, 3)
+    fig, axs = plt.subplots(2, n_bands, figsize=figsize)
+    
+    # Handle case with single band
+    if n_bands == 1:
+        axs = axs.reshape(2, 1)
+    
+    for i, k in enumerate(bands):
+        u_s = samples[f'u_star_{k}'].values.T
+        for j in range(2):
+            ax = axs[j, i]
+            ax.hist(u_s[:, j], histtype='step', density=True, bins=30)
+            
+            # Handle single vs multi-band priors
+            if isinstance(priors['u_star'][k], (tuple, list, np.ndarray)):
+                # Multi-band case
+                mu, unc = priors['u_star'][k][j], priors['u_star_unc'][k][j]
+            else:
+                # Single-band case
+                mu, unc = priors['u_star'][k], priors['u_star_unc'][k]
+            
+            # Plot prior based on type
+            dist = priors['u_star_prior']
+            if dist == 'uniform':
+                a, b = mu - unc/2, mu + unc/2
+                ax.axhline(1/(b-a), color='darkorange', lw=3, alpha=0.75)
+            elif dist == 'gaussian':
+                xi = np.linspace(mu - 4 * unc, mu + 4 * unc)
+                ax.plot(xi, st.norm.pdf(xi, mu, unc), color='darkorange', lw=3, alpha=0.75)
+                
+            ax.set_xlabel(['u1', 'u2'][j])
+            ax.yaxis.set_visible(False)
+            if j == 0:
+                ax.set_title(k)
+    
+    fig.tight_layout()
+    return fig
