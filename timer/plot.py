@@ -424,25 +424,36 @@ def systematics(fit, name, style=1):
 
     return fig
 
-def limb_darkening(trace, priors, bands):
+def limb_darkening(trace, priors, bands, show_profile=False, show_disk=False, map_soln=None):
     import arviz as az
     import scipy.stats as st
     
     samples = az.extract(trace.posterior)
     
     n_bands = len(bands)
-    figsize = (2 * n_bands, 3)
-    fig, axs = plt.subplots(2, n_bands, figsize=figsize)
+    n_rows = 2
+    if show_profile:
+        n_rows += 1
+    if show_disk:
+        n_rows += 1
+    
+    figsize = (2.5 * n_bands, 2 * n_rows)
+    fig, axs = plt.subplots(n_rows, n_bands, figsize=figsize)
     
     # Handle case with single band
     if n_bands == 1:
-        axs = axs.reshape(2, 1)
+        axs = axs.reshape(n_rows, 1)
     
     for i, k in enumerate(bands):
         u_s = samples[f'u_star_{k}'].values.T
         for j in range(2):
             ax = axs[j, i]
             ax.hist(u_s[:, j], histtype='step', density=True, bins=30)
+            
+            # Add MAP value as vertical line if available
+            if map_soln is not None:
+                u_map = map_soln[f'u_star_{k}'].flatten()
+                ax.axvline(u_map[j], color='dodgerblue', lw=2, alpha=0.8, label='MAP' if j == 0 and i == 0 else '')
             
             # Handle single vs multi-band priors
             if isinstance(priors['u_star'][k], (tuple, list, np.ndarray)):
@@ -456,15 +467,100 @@ def limb_darkening(trace, priors, bands):
             dist = priors['u_star_prior']
             if dist == 'uniform':
                 a, b = mu - unc/2, mu + unc/2
-                ax.axhline(1/(b-a), color='darkorange', lw=3, alpha=0.75)
+                ax.axhline(1/(b-a), color='darkorange', lw=3, alpha=0.75, label='prior' if j == 0 and i == 0 else '')
             elif dist == 'gaussian':
                 xi = np.linspace(mu - 4 * unc, mu + 4 * unc)
-                ax.plot(xi, st.norm.pdf(xi, mu, unc), color='darkorange', lw=3, alpha=0.75)
+                ax.plot(xi, st.norm.pdf(xi, mu, unc), color='darkorange', lw=3, alpha=0.75, label='prior' if j == 0 and i == 0 else '')
                 
             ax.set_xlabel(['u1', 'u2'][j])
             ax.yaxis.set_visible(False)
             if j == 0:
                 ax.set_title(k)
+                # Add legend only to the first subplot
+                if i == 0 and (map_soln is not None or dist in ['uniform', 'gaussian']):
+                    ax.legend(fontsize=8)
+        
+        # Get best-fit parameters for profile and disk plots
+        if map_soln is not None:
+            u_map = map_soln[f'u_star_{k}'].flatten()
+            u1_best, u2_best = u_map[0], u_map[1]
+            label = 'MAP'
+        else:
+            u1_best, u2_best = np.median(u_s, axis=0)
+            label = 'median'
+        
+        current_row = 2
+        
+        # Add limb darkening profile plot if requested
+        if show_profile:
+            ax = axs[current_row, i]
+            
+            # Create mu grid (cosine of angle from disk center)
+            mu = np.linspace(0, 1, 100)
+            
+            # Plot sample of intensity profiles
+            n_samples = min(100, u_s.shape[0])
+            indices = np.random.choice(u_s.shape[0], n_samples, replace=False)
+            
+            for idx in indices:
+                u1, u2 = u_s[idx, 0], u_s[idx, 1]
+                intensity = 1 - u1 * (1 - mu) - u2 * (1 - mu)**2
+                ax.plot(mu, intensity, 'k-', alpha=0.05, lw=0.5)
+                
+            intensity_best = 1 - u1_best * (1 - mu) - u2_best * (1 - mu)**2
+            ax.plot(mu, intensity_best, 'r-', lw=2, label=label)
+            
+            ax.set_xlabel('μ = cos(θ)')
+            ax.set_ylabel('I(μ)/I(0)')
+            ax.set_xlim(0, 1)
+            ax.grid(True, alpha=0.3)
+            if i == 0:
+                ax.legend(fontsize=8)
+            current_row += 1
+        
+        # Add 2D stellar disk visualization if requested
+        if show_disk:
+            ax = axs[current_row, i]
+            
+            # Create 2D grid for stellar disk
+            size = 500
+            x = np.linspace(-1, 1, size)
+            y = np.linspace(-1, 1, size)
+            X, Y = np.meshgrid(x, y)
+            
+            # Distance from center
+            R = np.sqrt(X**2 + Y**2)
+            
+            # Create circular mask (stellar disk)
+            disk_mask = R <= 1.0
+            
+            # Calculate mu = cos(theta) = sqrt(1 - R^2) for points inside disk
+            mu = np.zeros_like(R)
+            mu[disk_mask] = np.sqrt(1 - R[disk_mask]**2)
+            
+            # Calculate limb darkening intensity
+            intensity = np.zeros_like(R)
+            intensity[disk_mask] = 1 - u1_best * (1 - mu[disk_mask]) - u2_best * (1 - mu[disk_mask])**2
+            
+            # Set outside disk to NaN for white background
+            intensity[~disk_mask] = np.nan
+            
+            # Plot the stellar disk
+            im = ax.imshow(intensity, extent=[-1, 1, -1, 1], origin='lower', 
+                          cmap='inferno', vmin=0, vmax=1)
+            
+            # Add colorbar only for first band
+            if i == 0:
+                cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                cbar.set_label('I(μ)/I(0)', fontsize=8)
+                cbar.ax.tick_params(labelsize=6)
+            
+            ax.set_xlim(-1, 1)
+            ax.set_ylim(-1, 1)
+            ax.set_aspect('equal')
+            ax.set_xlabel('x/R*')
+            ax.set_ylabel('y/R*')
+            ax.set_title(f'{k} disk ({label})', fontsize=8)
     
     fig.tight_layout()
     return fig

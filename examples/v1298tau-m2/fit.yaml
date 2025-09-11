@@ -30,4 +30,5 @@ data:
 planets: c
 tc_pred_iso: 2023-12-02 22:56
 tc_pred_unc: 0.08
-cores: 1
+tune: 500
+draws: 500

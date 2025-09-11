@@ -22,4 +22,4 @@ data:
 planets: b
 tc_pred_iso: 2023-07-31 11:10
 tc_pred_unc: 0.08
-cores: 1
+# cores: 1
