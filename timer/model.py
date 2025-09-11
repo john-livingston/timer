@@ -2,6 +2,8 @@ import numpy as np
 import exoplanet as xo
 import pymc as pm
 import pytensor.tensor as pt
+import logging
+from . import optim
 
 def bump_model(t, t_center, width, amplitude, theano=True):
     """
@@ -162,8 +164,10 @@ def build(
     fixed=[],
     verbose=False,
     logp_threshold=1,
-    sequential_opt=True
+    sequential_opt=False,
+    use_custom_optimizer=True
 ):
+    logging.info("Building model with optimizer: %s", 'custom' if use_custom_optimizer else 'pymc')
 
     with pm.Model() as model:
 
@@ -431,7 +435,18 @@ def build(
         logp_init = model.point_logps(start_filtered)
         
         # optimize all parameters
-        map_soln = pm.find_MAP(start=start)
+        if use_custom_optimizer:
+            logging.info("Using custom optimizer")
+            try:
+                map_soln = optim.optimize(start=start, model=model)
+                logging.info("Custom optimizer completed successfully")
+            except Exception as e:
+                logging.warning(f"Custom optimizer failed: {e}")
+                logging.info("Falling back to PyMC find_MAP")
+                map_soln = pm.find_MAP(start=start)
+        else:
+            logging.info("Using PyMC find_MAP")
+            map_soln = pm.find_MAP(start=start)
 
         # Get final log probability after MAP optimization - filter to only include value variables
         map_soln_filtered = {k: v for k, v in map_soln.items() if k in [var.name for var in model.value_vars]}

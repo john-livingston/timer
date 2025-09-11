@@ -24,6 +24,7 @@ defaults = dict(
         include_flare = False,
         include_bump = False,
         use_gp = False,
+        use_custom_optimizer = True,
     ),
 
     sampler = dict(
@@ -107,6 +108,7 @@ class TransitFit:
         self.include_flare = fit_params['include_flare']
         self.include_bump = fit_params['include_bump']
         self.use_gp = fit_params['use_gp']
+        self.use_custom_optimizer = fit_params['use_custom_optimizer']
         self.uniform = fit_params.get('uniform', {})
         if self.include_flare:
             self.flare = self.fit_params['flare']
@@ -248,10 +250,11 @@ class TransitFit:
             nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
             fixed, fit_basis = self.fixed, self.fit_basis
             include_mean, include_flare, include_bump = self.include_mean, self.include_flare, self.include_bump
+            use_custom_optimizer = self.use_custom_optimizer
             self.model, self.map_soln = model.build(
                 data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
                 masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, include_bump=include_bump,
-                verbose=verbose
+                verbose=verbose, use_custom_optimizer=use_custom_optimizer
             )
             logging.info(f"Model: {self.model}")
             pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
