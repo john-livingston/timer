@@ -87,7 +87,7 @@ def aflare1(t, tpeak, fwhm, ampl, theano=True):
 
 
 def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None, 
-           mu=None, sd=None, lower=None, upper=None, verbose=False, initval=None):
+           mu=None, sd=None, lower=None, upper=None, verbose=False, initval=None, bounds=None):
     if priors is not None:
         dist = priors[f'{key}_prior']
     if name is None:
@@ -95,10 +95,13 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
     if dist == 'gaussian':
         if priors is not None:
             mu, sd = priors[key], priors[f'{key}_unc']
-        fun = pm.Normal if bounded is None else bounded
         if initval is None:
             initval = mu
-        rv = fun(name, mu=mu, sigma=sd, shape=shape, initval=initval)
+        if bounds is not None:
+            lower_bound, upper_bound = bounds
+            rv = BoundedNormal(name, mu=mu, sd=sd, shape=shape, lower=lower_bound, upper=upper_bound)
+        else:
+            rv = pm.Normal(name, mu=mu, sigma=sd, shape=shape, initval=initval)
         spec = f'{dist}({mu},{sd})'
     elif dist == 'uniform':
         if priors is not None:
@@ -180,7 +183,10 @@ def build(
             p = f'u_star_{band}'
             if 'u_star' in priors.keys():
                 if 'u_star' in fixed:
-                    v[p] = priors['u_star'][band]
+                    # Convert fixed u_star values to proper tensor for exoplanet
+                    u_star_vals = priors['u_star'][band]
+                    # Ensure it's a tensor that can be indexed
+                    v[p] = pt.as_tensor_variable(u_star_vals)
                 else:
                     if priors['u_star_prior'] == 'uniform':
                         # For uniform priors, calculate bounds directly
@@ -272,14 +278,16 @@ def build(
                             name=name,
                             priors=priors,
                             shape=nplanets,
-                            verbose=verbose
+                            verbose=verbose,
+                            bounds=[0, 1]
                         )
                 elif p in ['ror', 'b']:
                     v[p] = get_rv(
                         key=p,
                         priors=priors,
                         shape=nplanets, 
-                        verbose=verbose
+                        verbose=verbose,
+                        bounds=[0, 1]
                     )
                 else:
                     v[p] = get_rv(
@@ -432,7 +440,26 @@ def build(
 
         # Get initial log probability - filter to only include value variables
         start_filtered = {k: v for k, v in start.items() if k in [var.name for var in model.value_vars]}
-        logp_init = model.point_logps(start_filtered)
+        
+        # Log initial parameter values for debugging
+        logging.info("Initial parameter values:")
+        for k, v in start.items():
+            if isinstance(v, np.ndarray):
+                if v.size > 10:
+                    logging.info(f"  {k}: shape={v.shape}, mean={np.mean(v):.6f}, std={np.std(v):.6f}")
+                else:
+                    logging.info(f"  {k}: {v}")
+            else:
+                logging.info(f"  {k}: {v}")
+        
+        try:
+            logp_init = model.point_logps(start_filtered)
+            logging.info("Initial logp evaluation successful:")
+            for k, v in logp_init.items():
+                logging.info(f"  {k}: {v}")
+        except Exception as e:
+            logging.error(f"Initial logp evaluation failed: {e}")
+            raise
         
         # optimize all parameters
         if use_custom_optimizer:

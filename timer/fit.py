@@ -95,6 +95,30 @@ class TransitFit:
                 if k not in self.fit_params['data'][n].keys():
                     logging.info(f'setting default for {n}: {k} = {v}')
                     self.fit_params['data'][n][k] = v
+        
+        # Sanity checks for incompatible configurations
+        self._validate_parameter_conflicts()
+
+    def _validate_parameter_conflicts(self):
+        """Check for incompatible parameter configurations"""
+        fixed_params = set(self.fit_params.get('fixed', []))
+        uniform_params = set(self.fit_params.get('uniform', {}).keys())
+        
+        # Can't be both fixed and have priors
+        conflicts = fixed_params.intersection(uniform_params)
+        if conflicts:
+            raise ValueError(f"Parameters {list(conflicts)} cannot be both fixed and in uniform priors")
+        
+        # Validate bounds
+        for param, bounds in self.fit_params.get('uniform', {}).items():
+            if len(bounds) != 2 or bounds[0] >= bounds[1]:
+                raise ValueError(f"Invalid bounds for '{param}': {bounds}")
+            
+            lower, upper = bounds
+            if param == 'ror' and (lower < 0 or upper > 1):
+                raise ValueError(f"ror must be in [0,1], got: {bounds}")
+            if param == 'b' and lower < 0:
+                raise ValueError(f"b cannot be negative, got: {bounds}")
 
     def setup(self):
         fit_params = self.fit_params

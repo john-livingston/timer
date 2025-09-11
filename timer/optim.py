@@ -9,6 +9,7 @@ from scipy.optimize import minimize
 from pymc.blocking import DictToArrayBijection, RaveledVars
 from pymc.util import get_default_varnames
 import sys
+import logging
 
 
 def optimize(
@@ -125,6 +126,7 @@ class ModelWrapper:
         # Pre-compile the model logp and gradient
         logp = model.logp()
         grad_logp = pt.grad(logp, vars, disconnected_inputs="ignore")
+        # Use fast compilation mode for better performance
         self.func = model.compile_fn([logp] + grad_logp, mode="FAST_COMPILE")
     
     def __call__(self, vec):
@@ -133,6 +135,14 @@ class ModelWrapper:
             # Convert parameter vector back to point format
             point = DictToArrayBijection.rmap(RaveledVars(vec, self.bij.point_map_info))
             
+            logging.debug(f"Evaluating point with {len(vec)} parameters")
+            logging.debug(f"Parameter vector stats: min={np.min(vec):.6f}, max={np.max(vec):.6f}, any_nan={np.any(np.isnan(vec))}")
+            
+            # Check point values
+            for k, v in point.items():
+                if np.any(np.isnan(v)) or np.any(np.isinf(v)):
+                    logging.debug(f"BAD VALUE in {k}: {v}")
+            
             # Evaluate function
             res = self.func(point)
             
@@ -140,14 +150,31 @@ class ModelWrapper:
             logp = res[0]
             grads = res[1:]
             
+            logging.debug(f"logp = {logp}, type = {type(logp)}")
+            if np.isnan(logp) or np.isinf(logp):
+                logging.debug(f"BAD LOGP: {logp}")
+                logging.debug(f"Point that caused bad logp:")
+                for k, v in point.items():
+                    logging.debug(f"  {k}: {v}")
+            
+            # Check gradients
+            for i, (var, grad) in enumerate(zip(self.vars, grads)):
+                if np.any(np.isnan(grad)) or np.any(np.isinf(grad)):
+                    logging.debug(f"BAD GRADIENT for {var.name}: {grad}")
+            
             # Convert gradients back to vector format
             grad_dict = {var.name: grad for var, grad in zip(self.vars, grads)}
             grad_vec = DictToArrayBijection.map(grad_dict)
+            
+            logging.debug(f"Gradient vector stats: min={np.min(grad_vec.data):.6f}, max={np.max(grad_vec.data):.6f}, any_nan={np.any(np.isnan(grad_vec.data))}")
             
             # Return negative logp (since scipy minimizes) and negative gradient
             return -logp, -grad_vec.data
             
         except Exception as e:
-            print("array:", vec)
-            print("error:", str(e))
+            logging.debug("Exception in optimizer evaluation")
+            logging.debug(f"array: {vec}")
+            logging.debug(f"error: {str(e)}")
+            import traceback
+            logging.debug(traceback.format_exc())
             raise

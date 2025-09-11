@@ -437,7 +437,7 @@ def limb_darkening(trace, priors, bands, show_profile=False, show_disk=False, ma
     if show_disk:
         n_rows += 1
     
-    figsize = (2.5 * n_bands, 2 * n_rows)
+    figsize = (3 * n_bands, 2.5 * n_rows)
     fig, axs = plt.subplots(n_rows, n_bands, figsize=figsize)
     
     # Handle case with single band
@@ -478,7 +478,7 @@ def limb_darkening(trace, priors, bands, show_profile=False, show_disk=False, ma
                 ax.set_title(k)
                 # Add legend only to the first subplot
                 if i == 0 and (map_soln is not None or dist in ['uniform', 'gaussian']):
-                    ax.legend(fontsize=8)
+                    ax.legend(fontsize=8, loc='upper left', frameon=False)
         
         # Get best-fit parameters for profile and disk plots
         if map_soln is not None:

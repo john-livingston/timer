@@ -15,8 +15,8 @@ tc_pred_unc: 0.06
 uniform:
   ror: [0.03,0.06]
   b: [0,1]
-  u_star: [0,1]
-# fixed: ['period', 'u_star']
+#   u_star: [0,1]
+fixed: ['period', 'u_star']
 clobber: True
 tune: 100
 draws: 100

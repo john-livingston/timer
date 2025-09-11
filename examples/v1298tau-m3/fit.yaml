@@ -22,4 +22,11 @@ data:
 planets: b
 tc_pred_iso: 2023-07-31 11:10
 tc_pred_unc: 0.08
-# cores: 1
+tune: 100
+draws: 100
+chromatic: true
+uniform:
+  ror: [0.02,0.06]
+  b: [0,1]
+  u_star: [0,1]
+# fixed: ['period', 'u_star']
