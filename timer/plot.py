@@ -468,3 +468,80 @@ def limb_darkening(trace, priors, bands):
     
     fig.tight_layout()
     return fig
+
+def limb_darkening_corner(trace, soln, priors, bands):
+    import corner
+    import scipy.stats as st
+    
+    # Build parameter names and trace data
+    var_names = []
+    trace_data = []
+    truths = []
+    
+    for band in bands:
+        # Get samples for this band
+        u_samples = trace.posterior[f'u_star_{band}'].values.reshape(-1, 2)
+        
+        # Add parameter names
+        var_names.extend([f'u1_{band}', f'u2_{band}'])
+        
+        # Add to trace data
+        if len(trace_data) == 0:
+            trace_data = u_samples
+        else:
+            trace_data = np.c_[trace_data, u_samples]
+            
+        # Add truth values from MAP solution
+        u_map = soln[f'u_star_{band}'].flatten()
+        truths.extend([u_map[0], u_map[1]])
+    
+    # Create corner plot
+    ndim = len(var_names)
+    figsize = (2.2*ndim, 2.2*ndim)
+    fig, axs = plt.subplots(ndim, ndim, figsize=figsize)
+    
+    hist_kwargs = dict(lw=1, alpha=1, density=True)
+    title_kwargs = dict(fontdict=dict(fontsize=12))
+    data_kwargs = dict(alpha=0.01)
+    
+    fig = corner.corner(
+        trace_data,
+        fig=fig,
+        labels=var_names,
+        truths=truths,
+        truth_color='dodgerblue',
+        hist_kwargs=hist_kwargs,
+        title_kwargs=title_kwargs,
+        data_kwargs=data_kwargs,
+        smooth=1,
+        show_titles=True,
+        title_fmt='.4f'
+    )
+    
+    # Add priors
+    prior_kwargs = dict(lw=3, color='darkorange', zorder=-10, alpha=0.75)
+    axs_diag = np.diag(axs)
+    
+    for i, (name, ax) in enumerate(zip(var_names, axs_diag)):
+        band = name.split('_')[1]
+        coeff_idx = 0 if name.startswith('u1') else 1
+        
+        # Handle single vs multi-band priors
+        if isinstance(priors['u_star'][band], (tuple, list, np.ndarray)):
+            mu, unc = priors['u_star'][band][coeff_idx], priors['u_star_unc'][band][coeff_idx]
+        else:
+            mu, unc = priors['u_star'][band], priors['u_star_unc'][band]
+        
+        dist = priors['u_star_prior']
+        xlim = ax.get_xlim()
+        
+        if dist == 'uniform':
+            a, b = mu - unc/2, mu + unc/2
+            ax.axhline(1/(b-a), **prior_kwargs)
+        elif dist == 'gaussian':
+            xi = np.linspace(*ax.get_xlim())
+            ax.plot(xi, st.norm.pdf(xi, loc=mu, scale=unc), **prior_kwargs)
+            
+        plt.setp(ax, xlim=xlim)
+    
+    return fig

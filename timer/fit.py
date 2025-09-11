@@ -438,15 +438,21 @@ class TransitFit:
         plt.tight_layout()
         plt.savefig(os.path.join(self.outdir, fn))
 
-    def plot_limb_darkening(self, fn=None):
+    def plot_limb_darkening(self, fn=None, corner=True):
         if 'u_star' in self.fixed:
             print('Limb darkening parameters are fixed - skipping plot')
             return
         
-        print('generating limb darkening plot')
-        fig = plot.limb_darkening(self.trace, self.priors, self.bands)
-        if fn is None:
-            fn = 'limb_darkening.png'
+        if corner:
+            print('generating limb darkening corner plot')
+            fig = plot.limb_darkening_corner(self.trace, self.map_soln, self.priors, self.bands)
+            if fn is None:
+                fn = 'corner-limb_darkening.png'
+        else:
+            print('generating limb darkening plot')
+            fig = plot.limb_darkening(self.trace, self.priors, self.bands)
+            if fn is None:
+                fn = 'limb_darkening.png'
         plt.savefig(os.path.join(self.outdir, fn))
         
     def save_posterior_samples(self, filename='posterior_samples.csv.gz'):
