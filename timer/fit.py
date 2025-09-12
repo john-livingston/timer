@@ -455,6 +455,44 @@ class TransitFit:
         fig.subplots_adjust(hspace=0.02, wspace=0.02)
         plt.savefig(os.path.join(self.outdir, fn))
 
+    def plot_corner_subset(self, param_names, show_prior=True, fn=None, **corner_kwargs):
+        """
+        Create a corner plot for a specific subset of parameters.
+        
+        Args:
+            param_names: List of parameter names to include (e.g., ['flare_tpeak', 'flare_fwhm', 'flare_ampl_g'])
+            show_prior: Whether to show prior distributions
+            fn: Filename to save plot (optional)
+            **corner_kwargs: Additional arguments passed to corner.corner()
+        
+        Example usage:
+            # Plot only flare parameters
+            fit.plot_corner_subset(['flare_tpeak', 'flare_fwhm', 'flare_ampl_g', 'flare_ampl_r'])
+            
+            # Plot transit parameters
+            fit.plot_corner_subset(['t0', 'ror', 'b', 'dur'])
+        """
+        logging.info(f'generating corner plot for parameters: {param_names}')
+        fig = plot.corner_subset(
+            self.trace,
+            self.map_soln,
+            self.priors,
+            param_names,
+            show_prior=show_prior,
+            **corner_kwargs
+        )
+        
+        if fn is None:
+            param_str = '_'.join(param_names[:3])  # Use first 3 params in filename
+            if len(param_names) > 3:
+                param_str += f'_plus{len(param_names)-3}more'
+            fn = f'corner_{param_str}.png'
+            
+        plt.tight_layout()
+        fig.subplots_adjust(hspace=0.02, wspace=0.02)
+        plt.savefig(os.path.join(self.outdir, fn))
+        return fig
+
     def plot_trace(self, fn=None):
         
         print('generating trace plot')

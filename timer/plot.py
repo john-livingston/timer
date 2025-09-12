@@ -153,6 +153,113 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
 
     return fig
 
+def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kwargs):
+    """
+    Create a corner plot for a specific subset of parameters.
+    
+    Args:
+        trace: PyMC InferenceData object
+        soln: MAP solution dictionary
+        priors: Priors dictionary
+        param_names: List of parameter names to include in corner plot
+        show_prior: Whether to show prior distributions
+        **corner_kwargs: Additional arguments passed to corner.corner()
+    
+    Returns:
+        matplotlib Figure object
+    """
+    import corner
+    import scipy.stats as st
+    
+    # Build trace array and truths for specified parameters
+    trace_list = []
+    truths = []
+    var_names = []
+    
+    for param in param_names:
+        if param in trace.posterior:
+            # Get posterior samples
+            samples = trace.posterior[param].values.reshape(-1)
+            if len(samples.shape) > 1 and samples.shape[1] > 1:
+                # Handle multi-dimensional parameters (flatten if needed)
+                samples = samples.flatten()
+            trace_list.append(samples)
+            
+            # Get MAP value
+            if param in soln:
+                truths.append(soln[param])
+            else:
+                truths.append(np.median(samples))
+                
+            var_names.append(param)
+        else:
+            print(f"Warning: Parameter '{param}' not found in trace")
+    
+    if not trace_list:
+        raise ValueError("No valid parameters found in trace")
+    
+    # Convert to array
+    trace_array = np.column_stack(trace_list)
+    truths = np.array(truths)
+    
+    # Set default corner plot arguments
+    corner_defaults = {
+        'labels': var_names,
+        'truths': truths,
+        'truth_color': 'red',
+        'show_titles': True,
+        'title_kwargs': {'fontsize': 12}
+    }
+    corner_defaults.update(corner_kwargs)
+    
+    # Create corner plot
+    fig = corner.corner(trace_array, **corner_defaults)
+    
+    # Add priors if requested
+    if show_prior:
+        axes = np.array(fig.axes).reshape((len(var_names), len(var_names)))
+        prior_kwargs = {'alpha': 0.5, 'color': 'blue', 'linestyle': '--', 'linewidth': 2}
+        
+        for i, param in enumerate(var_names):
+            ax = axes[i, i]  # Diagonal plot
+            
+            # Parse parameter to get base parameter name
+            if param.startswith('flare_'):
+                base_param = param.replace('flare_', '')
+                # Handle band-specific parameters
+                if base_param.startswith('ampl_'):
+                    base_param = 'flare_ampl'
+                elif base_param in ['tpeak', 'fwhm']:
+                    base_param = f'flare_{base_param}'
+            elif param.startswith('bump_'):
+                base_param = param.replace('bump_', '')
+                base_param = f'bump_{base_param}'
+            else:
+                base_param = param
+            
+            # Extract base parameter name without band suffix
+            if '_' in base_param and base_param.split('_')[-1] in ['g', 'r', 'i', 'z', 'T']:
+                base_param = '_'.join(base_param.split('_')[:-1])
+            
+            if base_param in priors:
+                try:
+                    mu = priors[base_param]
+                    unc = priors[f'{base_param}_unc']
+                    dist = priors[f'{base_param}_prior']
+                    
+                    xlim = ax.get_xlim()
+                    if dist == 'uniform':
+                        a, b = mu - unc/2, mu + unc/2
+                        ax.axhline(1/(b-a), **prior_kwargs)
+                    elif dist == 'gaussian':
+                        xi = np.linspace(*ax.get_xlim())
+                        ax.plot(xi, st.norm.pdf(xi, loc=mu, scale=unc), **prior_kwargs)
+                    plt.setp(ax, xlim=xlim)
+                except KeyError:
+                    pass  # Skip if prior info not available
+    
+    return fig
+
 def plot_chromatic_ror(trace, bands, nplanets=1, figsize=(6,4)):
     
     from matplotlib.patches import Rectangle
