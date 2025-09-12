@@ -40,7 +40,7 @@ def plot_outliers(x, resid, mask, fp=None):
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
            chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, show_prior=True, subset=None):
 
-    # If subset is specified, use the subset functionality
+    # If subset is specified, use the subset functionality with same plotting style
     if subset is not None:
         return corner_subset(trace, soln, priors, subset, show_prior=show_prior)
 
@@ -195,23 +195,31 @@ def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kw
     trace_array = np.column_stack(trace_list)
     truths = np.array(truths)
     
-    # Set default corner plot arguments
-    corner_defaults = {
-        'labels': var_names,
-        'truths': truths,
-        'truth_color': 'red',
-        'show_titles': True,
-        'title_kwargs': {'fontsize': 12}
-    }
-    corner_defaults.update(corner_kwargs)
-    
-    # Create corner plot
-    fig = corner.corner(trace_array, **corner_defaults)
+    # Use exact same plotting style as main corner function
+    fig = None
+    hist_kwargs = dict(density=True, alpha=0.6, color='dodgerblue', lw=1.5, ls='-')
+    title_kwargs = dict(fontsize=8)
+    data_kwargs = dict(alpha=0.01)
+
+    fig = corner.corner(
+        trace_array,
+        fig=fig,
+        labels=var_names,
+        truths=truths,
+        truth_color='dodgerblue',
+        hist_kwargs=hist_kwargs,
+        title_kwargs=title_kwargs,
+        data_kwargs=data_kwargs,
+        smooth=1,
+        show_titles=True,
+        title_fmt='.4f'
+    )
     
     # Add priors if requested
     if show_prior:
+        import scipy.stats as st
         axes = np.array(fig.axes).reshape((len(var_names), len(var_names)))
-        prior_kwargs = {'alpha': 0.5, 'color': 'blue', 'linestyle': '--', 'linewidth': 2}
+        prior_kwargs = dict(lw=3, color='darkorange', zorder=-10, alpha=0.75)
         
         for i, param in enumerate(var_names):
             ax = axes[i, i]  # Diagonal plot
