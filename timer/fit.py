@@ -431,8 +431,28 @@ class TransitFit:
             resid = util.get_residuals(name, y, map_soln, mask=mask, use_gp=use_gp)
             logging.info(f"{name} residual scatter: {resid.std()*1e3 :.0f} ppm")
         
-    def plot_corner(self, sigma_lc=True, include_flare=True, include_bump=True, fn=None):
-
+    def plot_corner(self, sigma_lc=True, include_flare=True, include_bump=True, fn=None, subset=None):
+        """
+        Generate a corner plot of model parameters.
+        
+        Args:
+            sigma_lc: Include log-sigma light curve parameters
+            include_flare: Include flare parameters (if model has flares)
+            include_bump: Include bump parameters (if model has bumps)  
+            fn: Output filename (default: 'corner.png')
+            subset: List of specific parameter names to plot (e.g., ['flare_tpeak', 'flare_fwhm'])
+                   If provided, creates a corner plot for only these parameters
+        
+        Example usage:
+            # Regular corner plot (all parameters)
+            fit.plot_corner()
+            
+            # Subset: only flare parameters
+            fit.plot_corner(subset=['flare_tpeak', 'flare_fwhm', 'flare_ampl_g', 'flare_ampl_r'])
+            
+            # Subset: only transit parameters  
+            fit.plot_corner(subset=['t0', 'ror', 'b', 'dur'])
+        """
         logging.info('generating corner plot')
         fig = plot.corner(
             self.trace,
@@ -447,51 +467,14 @@ class TransitFit:
             sigma_lc=sigma_lc,
             include_flare=include_flare&self.include_flare,
             chromatic_flare=self.chromatic_flare,
-            include_bump=include_bump&self.include_bump
+            include_bump=include_bump&self.include_bump,
+            subset=subset
         )
         if fn is None:
             fn = 'corner.png'
         plt.tight_layout()
         fig.subplots_adjust(hspace=0.02, wspace=0.02)
         plt.savefig(os.path.join(self.outdir, fn))
-
-    def plot_corner_subset(self, param_names, show_prior=True, fn=None, **corner_kwargs):
-        """
-        Create a corner plot for a specific subset of parameters.
-        
-        Args:
-            param_names: List of parameter names to include (e.g., ['flare_tpeak', 'flare_fwhm', 'flare_ampl_g'])
-            show_prior: Whether to show prior distributions
-            fn: Filename to save plot (optional)
-            **corner_kwargs: Additional arguments passed to corner.corner()
-        
-        Example usage:
-            # Plot only flare parameters
-            fit.plot_corner_subset(['flare_tpeak', 'flare_fwhm', 'flare_ampl_g', 'flare_ampl_r'])
-            
-            # Plot transit parameters
-            fit.plot_corner_subset(['t0', 'ror', 'b', 'dur'])
-        """
-        logging.info(f'generating corner plot for parameters: {param_names}')
-        fig = plot.corner_subset(
-            self.trace,
-            self.map_soln,
-            self.priors,
-            param_names,
-            show_prior=show_prior,
-            **corner_kwargs
-        )
-        
-        if fn is None:
-            param_str = '_'.join(param_names[:3])  # Use first 3 params in filename
-            if len(param_names) > 3:
-                param_str += f'_plus{len(param_names)-3}more'
-            fn = f'corner_{param_str}.png'
-            
-        plt.tight_layout()
-        fig.subplots_adjust(hspace=0.02, wspace=0.02)
-        plt.savefig(os.path.join(self.outdir, fn))
-        return fig
 
     def plot_trace(self, fn=None):
         

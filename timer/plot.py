@@ -38,7 +38,11 @@ def plot_outliers(x, resid, mask, fp=None):
         plt.savefig(fp)
 
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
-           chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, show_prior=True):
+           chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, show_prior=True, subset=None):
+
+    # If subset is specified, use the subset functionality
+    if subset is not None:
+        return corner_subset(trace, soln, priors, subset, show_prior=show_prior)
 
     var_names = [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
     trace_ = trace.posterior['t0'].values.reshape(-1, nplanets)
@@ -156,17 +160,6 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
 def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kwargs):
     """
     Create a corner plot for a specific subset of parameters.
-    
-    Args:
-        trace: PyMC InferenceData object
-        soln: MAP solution dictionary
-        priors: Priors dictionary
-        param_names: List of parameter names to include in corner plot
-        show_prior: Whether to show prior distributions
-        **corner_kwargs: Additional arguments passed to corner.corner()
-    
-    Returns:
-        matplotlib Figure object
     """
     import corner
     import scipy.stats as st
