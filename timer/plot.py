@@ -38,7 +38,7 @@ def plot_outliers(x, resid, mask, fp=None):
         plt.savefig(fp)
 
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
-           chromatic=False, sigma_lc=True, include_flare=False, include_bump=False, show_prior=True):
+           chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, show_prior=True):
 
     var_names = [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
     trace_ = trace.posterior['t0'].values.reshape(-1, nplanets)
@@ -69,8 +69,22 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
             trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
             truths = np.append(truths, soln[par])
     if include_flare:
-        for p in 'tpeak fwhm ampl'.split():
+        # Shared flare parameters (tpeak and fwhm)
+        for p in 'tpeak fwhm'.split():
             par = f'flare_{p}'
+            var_names += [par]
+            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
+            truths = np.append(truths, soln[par])
+        
+        # Flare amplitude - chromatic or shared
+        if chromatic_flare:
+            for band in bands:
+                par = f'flare_ampl_{band}'
+                var_names += [par]
+                trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
+                truths = np.append(truths, soln[par])
+        else:
+            par = 'flare_ampl'
             var_names += [par]
             trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
             truths = np.append(truths, soln[par])

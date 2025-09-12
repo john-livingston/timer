@@ -120,6 +120,9 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
                 initval = priors[f'{key}_initval']
             else:
                 initval = priors[key]
+        # Ensure initval shape matches expected shape
+        if shape is not None:
+            initval = np.full(shape, initval)
         rv = pm.Uniform(name, lower=lower, upper=upper, shape=shape, initval=initval)
         spec = f'{dist}({lower},{upper})'
     else:
@@ -163,6 +166,7 @@ def build(
     use_gp=False,
     include_mean=True,
     include_flare=False,
+    chromatic_flare=False,
     include_bump=False,
     fixed=[],
     verbose=False,
@@ -225,6 +229,7 @@ def build(
 
         # flare parameters
         if include_flare:
+            # Shared flare parameters (tpeak and fwhm)
             flare_tpeak = get_rv(
                 key='flare_tpeak',
                 priors=priors,
@@ -237,12 +242,25 @@ def build(
                 shape=1,
                 verbose=verbose
             )
-            flare_ampl = get_rv(
-                key='flare_ampl',
-                priors=priors,
-                shape=1,
-                verbose=verbose
-            )
+            
+            # Band-dependent flare amplitude (chromatic_flare)
+            if chromatic_flare:
+                for band in bands:
+                    name = f'flare_ampl_{band}'
+                    v[name] = get_rv(
+                        key='flare_ampl',
+                        name=name,
+                        priors=priors,
+                        shape=1,
+                        verbose=verbose
+                    )
+            else:
+                flare_ampl = get_rv(
+                    key='flare_ampl',
+                    priors=priors,
+                    shape=1,
+                    verbose=verbose
+                )
 
         # bump parameters
         if include_bump:
@@ -379,7 +397,13 @@ def build(
                 parameters[f'{name}_gp'] = [log_rho_gp, log_sigma_gp]
 
             if include_flare:
-                flare = aflare1(x[mask], tpeak=flare_tpeak, fwhm=flare_fwhm, ampl=flare_ampl)
+                if chromatic_flare:
+                    # Use band-specific amplitude
+                    flare_ampl_band = v[f'flare_ampl_{band}']
+                else:
+                    # Use shared amplitude
+                    flare_ampl_band = flare_ampl
+                flare = aflare1(x[mask], tpeak=flare_tpeak, fwhm=flare_fwhm, ampl=flare_ampl_band)
                 pm.Deterministic(f"{name}_flare", flare)
             else:
                 flare = 0
