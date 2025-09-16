@@ -32,6 +32,10 @@ def get_residuals(name, y, soln, mask=None, use_gp=False):
     if tra_mod.ndim > 1:
         tra_mod = np.sum(tra_mod, axis=1)
 
+    # Apply mask to tra_mod if it has the same length as y
+    if len(tra_mod) == len(y):
+        tra_mod = tra_mod[mask]
+
     # Add flare and bump components if they exist
     flare_mod = soln[f"{name}_flare"] if f"{name}_flare" in soln.keys() else 0
     bump_mod = soln[f"{name}_bump"] if f"{name}_bump" in soln.keys() else 0
