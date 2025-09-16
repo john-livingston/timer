@@ -120,6 +120,9 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
                 initval = priors[f'{key}_initval']
             else:
                 initval = priors[key]
+        # Ensure initval matches the specified shape
+        if shape is not None and np.isscalar(initval):
+            initval = np.full(shape, initval)
         rv = pm.Uniform(name, lower=lower, upper=upper, shape=shape, initval=initval)
         spec = f'{dist}({lower},{upper})'
     else:

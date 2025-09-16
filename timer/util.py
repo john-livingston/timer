@@ -27,9 +27,16 @@ def get_residuals(name, y, soln, mask=None, use_gp=False):
 
     mean = soln[f"{name}_mean"]
     lin_mod = soln[f'{name}_lm'] if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
-    tra_mod = np.sum(soln[f"{name}_light_curves"], axis=-1)
+    tra_mod = soln[f"{name}_light_curves"]
+    # Sum over planets axis if multiple planets
+    if tra_mod.ndim > 1:
+        tra_mod = np.sum(tra_mod, axis=1)
 
-    sys_mod = lin_mod + mean
+    # Add flare and bump components if they exist
+    flare_mod = soln[f"{name}_flare"] if f"{name}_flare" in soln.keys() else 0
+    bump_mod = soln[f"{name}_bump"] if f"{name}_bump" in soln.keys() else 0
+
+    sys_mod = lin_mod + mean + flare_mod + bump_mod
     if use_gp:
         gp_mod = soln[f"{name}_gp_pred"]
         sys_mod += gp_mod

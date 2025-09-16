@@ -312,9 +312,9 @@ class TransitFit:
         return util.compute_ic(soln, max_logp, nparams, ndata, method=ic, verbose=verbose)
         
     def plot_systematics(self, name, style=2, fn=None):
-        
+
         fig = plot.systematics(self, name, style=style)
-        if fn is not None:
+        if fig is not None and fn is not None:
             plt.savefig(os.path.join(self.outdir, fn), dpi=200, bbox_inches='tight')
 
     def plot_multi(self, keys=None, figsize=None, despine=True, noticks=True, fn=None):

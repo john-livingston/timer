@@ -110,7 +110,11 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
 
         import scipy.stats as st
         prior_kwargs = dict(lw=3, color='darkorange', zorder=-10, alpha=0.75)
-        axs_diag = np.diag(axs)
+        # Handle case where axs is a scalar (single subplot) or 2D array
+        if ndim == 1:
+            axs_diag = [axs]
+        else:
+            axs_diag = np.diag(axs)
         for name,ax in zip(var_names, axs_diag):
             if nplanets > 1:
                 par = name.split('_')[0]
@@ -309,6 +313,12 @@ def systematics(fit, name, style=1):
     w = fit.map_soln[f'{name}_weights']
     covariates = not X.shape[1] == nspline + ntrend + nbias
     ncovariates = X.shape[1] - ntrend - nspline - nbias
+
+    # Skip plotting if there's only bias term or would cause axes issues
+    ncols = sum([covariates, (trend is not None), spline])
+    if ncols <= 1:  # Only bias term or single component
+        print(f"Skipping systematics plot for {name}: insufficient systematic components ({ncols})")
+        return None
 
     x_ = x[mask]
     X_ = X[mask]
