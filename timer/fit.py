@@ -103,22 +103,42 @@ class TransitFit:
         """Check for incompatible parameter configurations"""
         fixed_params = set(self.fit_params.get('fixed', []))
         uniform_params = set(self.fit_params.get('uniform', {}).keys())
-        
+
         # Can't be both fixed and have priors
         conflicts = fixed_params.intersection(uniform_params)
         if conflicts:
             raise ValueError(f"Parameters {list(conflicts)} cannot be both fixed and in uniform priors")
-        
+
+        # Get number of planets for validation
+        nplanets = len(self.fit_params['planets'])
+
         # Validate bounds
         for param, bounds in self.fit_params.get('uniform', {}).items():
-            if len(bounds) != 2 or bounds[0] >= bounds[1]:
-                raise ValueError(f"Invalid bounds for '{param}': {bounds}")
-            
-            lower, upper = bounds
-            if param == 'ror' and (lower < 0 or upper > 1):
-                raise ValueError(f"ror must be in [0,1], got: {bounds}")
-            if param == 'b' and lower < 0:
-                raise ValueError(f"b cannot be negative, got: {bounds}")
+            # Check if we have planet-indexed bounds or single bounds
+            if param in ['period', 'dur', 'ror', 'b'] and isinstance(bounds[0], (list, tuple)):
+                # Planet-indexed bounds: [[low1,high1], [low2,high2], ...]
+                if len(bounds) != nplanets:
+                    raise ValueError(f"Number of {param} bounds ({len(bounds)}) must match number of planets ({nplanets})")
+
+                for i, planet_bounds in enumerate(bounds):
+                    if len(planet_bounds) != 2 or planet_bounds[0] >= planet_bounds[1]:
+                        raise ValueError(f"Invalid bounds for '{param}' planet {i}: {planet_bounds}")
+
+                    lower, upper = planet_bounds
+                    if param == 'ror' and (lower < 0 or upper > 1):
+                        raise ValueError(f"ror must be in [0,1] for planet {i}, got: {planet_bounds}")
+                    if param == 'b' and lower < 0:
+                        raise ValueError(f"b cannot be negative for planet {i}, got: {planet_bounds}")
+            else:
+                # Single bounds for all planets or non-planet parameters
+                if len(bounds) != 2 or bounds[0] >= bounds[1]:
+                    raise ValueError(f"Invalid bounds for '{param}': {bounds}")
+
+                lower, upper = bounds
+                if param == 'ror' and (lower < 0 or upper > 1):
+                    raise ValueError(f"ror must be in [0,1], got: {bounds}")
+                if param == 'b' and lower < 0:
+                    raise ValueError(f"b cannot be negative, got: {bounds}")
 
     def setup(self):
         fit_params = self.fit_params
@@ -752,42 +772,83 @@ The working directory must contain both 'fit.yaml' and 'sys.yaml' files.
     try:
         logging.info("Initializing TransitFit")
         fit = TransitFit(sys_params, fit_params, wd=wd, outdir=outdir)
-        
-        logging.info("Plotting data")
-        fit.plot_data()
-        
-        logging.info("Building model")
-        fit.build_model(verbose=True)
-        
-        logging.info("Clipping outliers")
-        fit.clip_outliers()
-        
-        logging.info("Sampling")
-        fit.sample()
-        
-        logging.info("Generating corner plot")
-        fit.plot_corner()
-        
-        logging.info("Generating trace plot")
-        fit.plot_trace()
-        
-        logging.info("Saving results")
-        fit.save_results()
-
-        elapsed = time.time() - tick
-        success_msg = f'Timer-fit completed successfully in {elapsed:.0f} seconds'
-        logging.info(success_msg)
-        
-        if not verbose:
-            print(success_msg)
-        
-        return 0
-        
     except Exception as e:
-        error_msg = f"Error during fitting: {e}"
+        error_msg = f"Error initializing TransitFit: {e}"
         logging.error(error_msg, exc_info=True)
         print(error_msg)
         return 1
+
+    try:
+        logging.info("Plotting data")
+        fit.plot_data()
+    except Exception as e:
+        error_msg = f"Error plotting data: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(error_msg)
+        return 1
+
+    try:
+        logging.info("Building model")
+        fit.build_model(verbose=True)
+    except Exception as e:
+        error_msg = f"Error building model: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(error_msg)
+        return 1
+
+    try:
+        logging.info("Clipping outliers")
+        fit.clip_outliers()
+    except Exception as e:
+        error_msg = f"Error clipping outliers: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(error_msg)
+        return 1
+
+    try:
+        logging.info("Sampling")
+        fit.sample()
+    except Exception as e:
+        error_msg = f"Error during sampling: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(error_msg)
+        return 1
+
+    try:
+        logging.info("Generating corner plot")
+        fit.plot_corner()
+    except Exception as e:
+        error_msg = f"Error generating corner plot: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(f"Warning: {error_msg}")
+        # Don't return 1 here - continue with other plots
+
+    try:
+        logging.info("Generating trace plot")
+        fit.plot_trace()
+    except Exception as e:
+        error_msg = f"Error generating trace plot: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(f"Warning: {error_msg}")
+        # Don't return 1 here - continue with saving results
+
+    try:
+        logging.info("Saving results")
+        fit.save_results()
+    except Exception as e:
+        error_msg = f"Error saving results: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(error_msg)
+        return 1
+
+    elapsed = time.time() - tick
+    success_msg = f'Timer-fit completed successfully in {elapsed:.0f} seconds'
+    logging.info(success_msg)
+
+    if not verbose:
+        print(success_msg)
+
+    return 0
 
 
 if __name__ == '__main__':

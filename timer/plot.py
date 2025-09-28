@@ -120,8 +120,19 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
                 par = name.split('_')[0]
                 if par not in priors.keys(): continue
                 pnum = int(name.split('_')[-1])
-                mu = priors[par][pnum-1]
-                unc = priors[f'{par}_unc'][pnum-1]
+
+                # Handle both scalar and array priors
+                if isinstance(priors[par], np.ndarray) and len(priors[par]) > 1:
+                    mu = priors[par][pnum-1]
+                else:
+                    # Scalar value - use directly
+                    mu = priors[par] if np.isscalar(priors[par]) else priors[par][0]
+
+                if isinstance(priors[f'{par}_unc'], np.ndarray) and len(priors[f'{par}_unc']) > 1:
+                    unc = priors[f'{par}_unc'][pnum-1]
+                else:
+                    # Scalar value - use directly
+                    unc = priors[f'{par}_unc'] if np.isscalar(priors[f'{par}_unc']) else priors[f'{par}_unc'][0]
             else:
                 if 'ror' in name and chromatic:
                     par = name.split('_')[0]

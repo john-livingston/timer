@@ -145,7 +145,7 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
         # Always store the original mean value from sys.yaml
         original_mean = np.array([i[par][0] for i in planets])
         priors[par] = original_mean
-        
+
         if par not in fixed:
             if par in uniform:
                 priors[f'{par}_prior'] = 'uniform'
@@ -153,11 +153,28 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
                 # The model expects: lower = priors[key] - priors[f'{key}_unc']/2
                 #                   upper = priors[key] + priors[f'{key}_unc']/2
                 # So: priors[f'{key}_unc'] = upper - lower
-                bounds = np.array(uniform[par])
-                priors[f'{par}_unc'] = bounds[1] - bounds[0]
-                # Store the center point as the parameter value for bounds calculation
-                priors[par] = np.array([(bounds[0] + bounds[1]) / 2] * len(planets))
-                # But store the original mean for use as initval
+
+                bounds_input = uniform[par]
+
+                # Check if we have planet-indexed bounds: [[low1,high1], [low2,high2], ...]
+                # or single bounds for all planets: [low, high]
+                if isinstance(bounds_input[0], (list, tuple)):
+                    # Planet-indexed bounds
+                    if len(bounds_input) != len(planets):
+                        raise ValueError(f"Number of {par} bounds ({len(bounds_input)}) must match number of planets ({len(planets)})")
+
+                    bounds_array = np.array(bounds_input)
+                    priors[f'{par}_unc'] = bounds_array[:, 1] - bounds_array[:, 0]
+                    # Store the center point as the parameter value for bounds calculation
+                    priors[par] = (bounds_array[:, 0] + bounds_array[:, 1]) / 2
+                else:
+                    # Single bounds for all planets (backward compatibility)
+                    bounds = np.array(bounds_input)
+                    priors[f'{par}_unc'] = bounds[1] - bounds[0]
+                    # Store the center point as the parameter value for bounds calculation
+                    priors[par] = np.array([(bounds[0] + bounds[1]) / 2] * len(planets))
+
+                # Store the original mean for use as initval
                 priors[f'{par}_initval'] = original_mean
             else:
                 # assume gaussian
