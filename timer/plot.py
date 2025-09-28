@@ -71,15 +71,42 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
     if include_flare:
         for p in 'tpeak fwhm ampl'.split():
             par = f'flare_{p}'
-            var_names += [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-            truths = np.append(truths, soln[par])
+            if par in trace.posterior:
+                param_trace = trace.posterior[par].values
+                param_soln = soln[par]
+
+                # Handle multiple flares
+                if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nflares)
+                    nflares = param_trace.shape[2]
+                    for i in range(nflares):
+                        var_names += [f'{par}_{i+1}']
+                        trace_ = np.c_[trace_, param_trace[:, :, i].reshape(-1, 1)]
+                        truths = np.append(truths, param_soln[i])
+                else:
+                    # Single flare
+                    var_names += [par]
+                    trace_ = np.c_[trace_, param_trace.reshape(-1, 1)]
+                    truths = np.append(truths, param_soln.flatten()[0] if hasattr(param_soln, 'flatten') else param_soln)
+
     if include_bump:
         for p in 'tcenter width ampl'.split():
             par = f'bump_{p}'
-            var_names += [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-            truths = np.append(truths, soln[par])
+            if par in trace.posterior:
+                param_trace = trace.posterior[par].values
+                param_soln = soln[par]
+
+                # Handle multiple bumps
+                if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nbumps)
+                    nbumps = param_trace.shape[2]
+                    for i in range(nbumps):
+                        var_names += [f'{par}_{i+1}']
+                        trace_ = np.c_[trace_, param_trace[:, :, i].reshape(-1, 1)]
+                        truths = np.append(truths, param_soln[i])
+                else:
+                    # Single bump
+                    var_names += [par]
+                    trace_ = np.c_[trace_, param_trace.reshape(-1, 1)]
+                    truths = np.append(truths, param_soln.flatten()[0] if hasattr(param_soln, 'flatten') else param_soln)
 
     import corner
 
@@ -116,32 +143,63 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
         else:
             axs_diag = np.diag(axs)
         for name,ax in zip(var_names, axs_diag):
-            if nplanets > 1:
-                par = name.split('_')[0]
+            # Handle different parameter types
+            name_parts = name.split('_')
+
+            # Check if this is a flare or bump parameter with multiple components
+            if len(name_parts) >= 3 and name_parts[0] in ['flare', 'bump'] and name_parts[-1].isdigit():
+                # e.g., 'flare_tpeak_1', 'bump_ampl_2'
+                par_base = '_'.join(name_parts[:-1])  # 'flare_tpeak', 'bump_ampl'
+                component_num = int(name_parts[-1])
+
+                if par_base not in priors.keys():
+                    continue
+
+                # Handle array priors for multiple flares/bumps
+                if isinstance(priors[par_base], np.ndarray) and len(priors[par_base]) > 1:
+                    mu = priors[par_base][component_num-1]
+                else:
+                    mu = priors[par_base] if np.isscalar(priors[par_base]) else priors[par_base][0]
+
+                if isinstance(priors[f'{par_base}_unc'], np.ndarray) and len(priors[f'{par_base}_unc']) > 1:
+                    unc = priors[f'{par_base}_unc'][component_num-1]
+                else:
+                    unc = priors[f'{par_base}_unc'] if np.isscalar(priors[f'{par_base}_unc']) else priors[f'{par_base}_unc'][0]
+
+                dist = priors[f'{par_base}_prior']
+
+            elif nplanets > 1 and name_parts[-1].isdigit() and name_parts[0] not in ['flare', 'bump']:
+                # Planet parameters like 't0_1', 'ror_2'
+                par = name_parts[0]
                 if par not in priors.keys(): continue
-                pnum = int(name.split('_')[-1])
+                pnum = int(name_parts[-1])
 
                 # Handle both scalar and array priors
                 if isinstance(priors[par], np.ndarray) and len(priors[par]) > 1:
                     mu = priors[par][pnum-1]
                 else:
-                    # Scalar value - use directly
                     mu = priors[par] if np.isscalar(priors[par]) else priors[par][0]
 
                 if isinstance(priors[f'{par}_unc'], np.ndarray) and len(priors[f'{par}_unc']) > 1:
                     unc = priors[f'{par}_unc'][pnum-1]
                 else:
-                    # Scalar value - use directly
                     unc = priors[f'{par}_unc'] if np.isscalar(priors[f'{par}_unc']) else priors[f'{par}_unc'][0]
+
+                dist = priors[f'{par}_prior']
+
             else:
+                # Single component parameters or chromatic ror
                 if 'ror' in name and chromatic:
-                    par = name.split('_')[0]
+                    par = name_parts[0]
                 else:
                     par = name
-                if par not in priors.keys(): continue
+
+                if par not in priors.keys():
+                    continue
+
                 mu = priors[par]
                 unc = priors[f'{par}_unc']
-            dist = priors[f'{par}_prior']
+                dist = priors[f'{par}_prior']
             xlim = ax.get_xlim()
             if dist == 'uniform':
                 a, b = mu-unc/2,mu+unc/2

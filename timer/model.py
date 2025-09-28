@@ -228,43 +228,49 @@ def build(
 
         # flare parameters
         if include_flare:
+            # Determine number of flares from priors
+            nflares = len(priors['flare_tpeak']) if isinstance(priors['flare_tpeak'], np.ndarray) else 1
+
             flare_tpeak = get_rv(
                 key='flare_tpeak',
                 priors=priors,
-                shape=1,
+                shape=nflares,
                 verbose=verbose
             )
             flare_fwhm = get_rv(
                 key='flare_fwhm',
                 priors=priors,
-                shape=1,
+                shape=nflares,
                 verbose=verbose
             )
             flare_ampl = get_rv(
                 key='flare_ampl',
                 priors=priors,
-                shape=1,
+                shape=nflares,
                 verbose=verbose
             )
 
         # bump parameters
         if include_bump:
+            # Determine number of bumps from priors
+            nbumps = len(priors['bump_tcenter']) if isinstance(priors['bump_tcenter'], np.ndarray) else 1
+
             bump_tcenter = get_rv(
                 key='bump_tcenter',
                 priors=priors,
-                shape=1,
+                shape=nbumps,
                 verbose=verbose
             )
             bump_width = get_rv(
                 key='bump_width',
                 priors=priors,
-                shape=1,
+                shape=nbumps,
                 verbose=verbose
             )
             bump_ampl = get_rv(
                 key='bump_ampl',
                 priors=priors,
-                shape=1,
+                shape=nbumps,
                 verbose=verbose
             )
 
@@ -382,13 +388,39 @@ def build(
                 parameters[f'{name}_gp'] = [log_rho_gp, log_sigma_gp]
 
             if include_flare:
-                flare = aflare1(x[mask], tpeak=flare_tpeak, fwhm=flare_fwhm, ampl=flare_ampl)
+                # Handle multiple flares by summing individual flare components
+                if nflares == 1:
+                    # Single flare - extract scalar values
+                    tpeak_val = flare_tpeak[0] if hasattr(flare_tpeak, '__getitem__') else flare_tpeak
+                    fwhm_val = flare_fwhm[0] if hasattr(flare_fwhm, '__getitem__') else flare_fwhm
+                    ampl_val = flare_ampl[0] if hasattr(flare_ampl, '__getitem__') else flare_ampl
+                    flare = aflare1(x[mask], tpeak=tpeak_val, fwhm=fwhm_val, ampl=ampl_val)
+                else:
+                    # Multiple flares - sum all components
+                    flare_total = pt.zeros_like(x[mask])
+                    for i in range(nflares):
+                        flare_component = aflare1(x[mask], tpeak=flare_tpeak[i], fwhm=flare_fwhm[i], ampl=flare_ampl[i])
+                        flare_total += flare_component
+                    flare = flare_total
                 pm.Deterministic(f"{name}_flare", flare)
             else:
                 flare = 0
 
             if include_bump:
-                bump = bump_model(x[mask], t_center=bump_tcenter, width=bump_width, amplitude=bump_ampl)
+                # Handle multiple bumps by summing individual bump components
+                if nbumps == 1:
+                    # Single bump - extract scalar values
+                    tcenter_val = bump_tcenter[0] if hasattr(bump_tcenter, '__getitem__') else bump_tcenter
+                    width_val = bump_width[0] if hasattr(bump_width, '__getitem__') else bump_width
+                    ampl_val = bump_ampl[0] if hasattr(bump_ampl, '__getitem__') else bump_ampl
+                    bump = bump_model(x[mask], t_center=tcenter_val, width=width_val, amplitude=ampl_val)
+                else:
+                    # Multiple bumps - sum all components
+                    bump_total = pt.zeros_like(x[mask])
+                    for i in range(nbumps):
+                        bump_component = bump_model(x[mask], t_center=bump_tcenter[i], width=bump_width[i], amplitude=bump_ampl[i])
+                        bump_total += bump_component
+                    bump = bump_total
                 pm.Deterministic(f"{name}_bump", bump)
             else:
                 bump = 0

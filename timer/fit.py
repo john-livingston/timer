@@ -273,19 +273,53 @@ class TransitFit:
             tc_guess, tc_guess_unc, uniform=self.uniform
         )
         if self.include_flare:
+            # Determine number of flares from vector length (use tpeak as reference)
+            if isinstance(self.flare['tpeak'], (list, tuple)):
+                self.nflares = len(self.flare['tpeak'])
+            else:
+                self.nflares = 1
+
             for p in 'tpeak fwhm ampl'.split():
-                self.priors[f'flare_{p}'] = self.flare[p]
+                param_val = self.flare[p]
+                if isinstance(param_val, (list, tuple)):
+                    if len(param_val) != self.nflares:
+                        raise ValueError(f"All flare parameters must have same length. "
+                                       f"tpeak has {self.nflares} values, {p} has {len(param_val)}")
+                    self.priors[f'flare_{p}'] = np.array(param_val)
+                else:
+                    # Single value - replicate for all flares
+                    self.priors[f'flare_{p}'] = np.array([param_val] * self.nflares)
+
                 self.priors[f'flare_{p}_prior'] = self.flare[f'{p}_prior']
                 self.priors[f'flare_{p}_unc'] = self.flare[f'{p}_unc']
+
+            # Adjust tpeak for reference time
             p = 'tpeak'
-            self.priors[f'flare_{p}'] = self.flare[p] - self.ref_time
+            self.priors[f'flare_{p}'] = self.priors[f'flare_{p}'] - self.ref_time
         if self.include_bump:
+            # Determine number of bumps from vector length (use tcenter as reference)
+            if isinstance(self.bump['tcenter'], (list, tuple)):
+                self.nbumps = len(self.bump['tcenter'])
+            else:
+                self.nbumps = 1
+
             for p in 'tcenter width ampl'.split():
-                self.priors[f'bump_{p}'] = self.bump[p]
+                param_val = self.bump[p]
+                if isinstance(param_val, (list, tuple)):
+                    if len(param_val) != self.nbumps:
+                        raise ValueError(f"All bump parameters must have same length. "
+                                       f"tcenter has {self.nbumps} values, {p} has {len(param_val)}")
+                    self.priors[f'bump_{p}'] = np.array(param_val)
+                else:
+                    # Single value - replicate for all bumps
+                    self.priors[f'bump_{p}'] = np.array([param_val] * self.nbumps)
+
                 self.priors[f'bump_{p}_prior'] = self.bump[f'{p}_prior']
                 self.priors[f'bump_{p}_unc'] = self.bump[f'{p}_unc']
+
+            # Adjust tcenter for reference time
             p = 'tcenter'
-            self.priors[f'bump_{p}'] = self.bump[p] - self.ref_time
+            self.priors[f'bump_{p}'] = self.priors[f'bump_{p}'] - self.ref_time
 
     def build_model(self, start=None, force=False, verbose=False, plot=True):
         if force or self.clobber or self.model is None:
