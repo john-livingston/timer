@@ -24,6 +24,7 @@ defaults = dict(
         include_flare = False,
         chromatic_flare = False,
         include_bump = False,
+        chromatic_bump = False,
         use_gp = False,
         use_custom_optimizer = True,
     ),
@@ -153,6 +154,7 @@ class TransitFit:
         self.include_flare = fit_params['include_flare']
         self.chromatic_flare = fit_params['chromatic_flare']
         self.include_bump = fit_params['include_bump']
+        self.chromatic_bump = fit_params['chromatic_bump']
         self.use_gp = fit_params['use_gp']
         self.use_custom_optimizer = fit_params['use_custom_optimizer']
         self.uniform = fit_params.get('uniform', {})
@@ -329,11 +331,11 @@ class TransitFit:
             data, priors, masks = self.data, self.priors, self.masks
             nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
             fixed, fit_basis = self.fixed, self.fit_basis
-            include_mean, include_flare, chromatic_flare, include_bump = self.include_mean, self.include_flare, self.chromatic_flare, self.include_bump
+            include_mean, include_flare, chromatic_flare, include_bump, chromatic_bump = self.include_mean, self.include_flare, self.chromatic_flare, self.include_bump, self.chromatic_bump
             use_custom_optimizer = self.use_custom_optimizer
             self.model, self.map_soln = model.build(
                 data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
-                masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, chromatic_flare=chromatic_flare, include_bump=include_bump,
+                masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, chromatic_flare=chromatic_flare, include_bump=include_bump, chromatic_bump=chromatic_bump,
                 verbose=verbose, use_custom_optimizer=use_custom_optimizer
             )
             logging.info(f"Model: {self.model}")
@@ -522,6 +524,7 @@ class TransitFit:
             include_flare=include_flare&self.include_flare,
             chromatic_flare=self.chromatic_flare,
             include_bump=include_bump&self.include_bump,
+            chromatic_bump=self.chromatic_bump,
             subset=subset
         )
         if fn is None:

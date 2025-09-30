@@ -168,6 +168,7 @@ def build(
     include_flare=False,
     chromatic_flare=False,
     include_bump=False,
+    chromatic_bump=False,
     fixed=[],
     verbose=False,
     logp_threshold=1,
@@ -288,6 +289,17 @@ def build(
                 shape=nbumps,
                 verbose=verbose
             )
+            # Band-dependent bump amplitude (chromatic_bump)
+            if chromatic_bump:
+                for band in bands:
+                    name = f'bump_ampl_{band}'
+                    v[name] = get_rv(
+                        key='bump_ampl',
+                        name=name,
+                        priors=priors,
+                        shape=nbumps,
+                        verbose=verbose
+                    )
 
         # parameters for the planets
         for p in "t0 period ror b".split():
@@ -428,18 +440,23 @@ def build(
                 flare = 0
 
             if include_bump:
+                # Get band-specific amplitude if chromatic bump is enabled
+                if chromatic_bump:
+                    bump_ampl_band = v[f'bump_ampl_{band}']
+                else:
+                    bump_ampl_band = bump_ampl
                 # Handle multiple bumps by summing individual bump components
                 if nbumps == 1:
                     # Single bump - extract scalar values
                     tcenter_val = bump_tcenter[0] if hasattr(bump_tcenter, '__getitem__') else bump_tcenter
                     width_val = bump_width[0] if hasattr(bump_width, '__getitem__') else bump_width
-                    ampl_val = bump_ampl[0] if hasattr(bump_ampl, '__getitem__') else bump_ampl
+                    ampl_val = bump_ampl_band[0] if hasattr(bump_ampl_band, '__getitem__') else bump_ampl_band
                     bump = bump_model(x[mask], t_center=tcenter_val, width=width_val, amplitude=ampl_val)
                 else:
                     # Multiple bumps - sum all components
                     bump_total = pt.zeros_like(x[mask])
                     for i in range(nbumps):
-                        bump_component = bump_model(x[mask], t_center=bump_tcenter[i], width=bump_width[i], amplitude=bump_ampl[i])
+                        bump_component = bump_model(x[mask], t_center=bump_tcenter[i], width=bump_width[i], amplitude=bump_ampl_band[i])
                         bump_total += bump_component
                     bump = bump_total
                 pm.Deterministic(f"{name}_bump", bump)

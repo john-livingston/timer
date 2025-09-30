@@ -38,7 +38,7 @@ def plot_outliers(x, resid, mask, fp=None):
         plt.savefig(fp)
 
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
-           chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, show_prior=True, subset=None):
+           chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, chromatic_bump=False, show_prior=True, subset=None):
 
     # If subset is specified, expand multi-component parameters if needed
     if subset is not None:
@@ -123,11 +123,39 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
                         param_names.append(par)
         
         if include_bump:
-            for p in 'tcenter width ampl'.split():
+            # Shared bump parameters (tcenter and width)
+            for p in 'tcenter width'.split():
                 par = f'bump_{p}'
                 if par in trace.posterior:
                     param_trace = trace.posterior[par].values
                     # Handle multiple bumps
+                    if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nbumps)
+                        nbumps = param_trace.shape[2]
+                        for i in range(nbumps):
+                            param_names.append(f'{par}_{i+1}')
+                    else:
+                        # Single bump
+                        param_names.append(par)
+            
+            # Bump amplitude - chromatic or shared
+            if chromatic_bump:
+                for band in bands:
+                    par = f'bump_ampl_{band}'
+                    if par in trace.posterior:
+                        param_trace = trace.posterior[par].values
+                        # Handle multiple bumps for chromatic amplitude
+                        if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nbumps)
+                            nbumps = param_trace.shape[2]
+                            for i in range(nbumps):
+                                param_names.append(f'{par}_{i+1}')
+                        else:
+                            # Single bump
+                            param_names.append(par)
+            else:
+                par = 'bump_ampl'
+                if par in trace.posterior:
+                    param_trace = trace.posterior[par].values
+                    # Handle multiple bumps for shared amplitude
                     if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nbumps)
                         nbumps = param_trace.shape[2]
                         for i in range(nbumps):
