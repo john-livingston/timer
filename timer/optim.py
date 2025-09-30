@@ -23,6 +23,8 @@ def optimize(
     **kwargs
 ):
     """Maximize the log prob of a PyMC model using scipy
+
+    Based on https://github.com/exoplanet-dev/pymc-ext/blob/pymc3/src/pymc3_ext/optim.py
     
     All extra arguments are passed directly to the ``scipy.optimize.minimize``
     function.

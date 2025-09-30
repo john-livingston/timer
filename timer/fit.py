@@ -22,6 +22,7 @@ defaults = dict(
         chromatic = False,
         include_mean = True, # the mean flux value (should not be True if add_bias=True)
         include_flare = False,
+        chromatic_flare = False,
         include_bump = False,
         use_gp = False,
         use_custom_optimizer = True,
@@ -150,6 +151,7 @@ class TransitFit:
         self.chromatic = fit_params['chromatic']
         self.include_mean = fit_params['include_mean']
         self.include_flare = fit_params['include_flare']
+        self.chromatic_flare = fit_params['chromatic_flare']
         self.include_bump = fit_params['include_bump']
         self.use_gp = fit_params['use_gp']
         self.use_custom_optimizer = fit_params['use_custom_optimizer']
@@ -327,11 +329,11 @@ class TransitFit:
             data, priors, masks = self.data, self.priors, self.masks
             nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
             fixed, fit_basis = self.fixed, self.fit_basis
-            include_mean, include_flare, include_bump = self.include_mean, self.include_flare, self.include_bump
+            include_mean, include_flare, chromatic_flare, include_bump = self.include_mean, self.include_flare, self.chromatic_flare, self.include_bump
             use_custom_optimizer = self.use_custom_optimizer
             self.model, self.map_soln = model.build(
                 data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
-                masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, include_bump=include_bump,
+                masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, chromatic_flare=chromatic_flare, include_bump=include_bump,
                 verbose=verbose, use_custom_optimizer=use_custom_optimizer
             )
             logging.info(f"Model: {self.model}")
@@ -483,8 +485,28 @@ class TransitFit:
             resid = util.get_residuals(name, y, map_soln, mask=mask, use_gp=use_gp)
             logging.info(f"{name} residual scatter: {resid.std()*1e3 :.0f} ppm")
         
-    def plot_corner(self, sigma_lc=True, include_flare=True, include_bump=True, fn=None):
-
+    def plot_corner(self, sigma_lc=True, include_flare=True, include_bump=True, fn=None, subset=None):
+        """
+        Generate a corner plot of model parameters.
+        
+        Args:
+            sigma_lc: Include log-sigma light curve parameters
+            include_flare: Include flare parameters (if model has flares)
+            include_bump: Include bump parameters (if model has bumps)  
+            fn: Output filename (default: 'corner.png')
+            subset: List of specific parameter names to plot (e.g., ['flare_tpeak', 'flare_fwhm'])
+                   If provided, creates a corner plot for only these parameters
+        
+        Example usage:
+            # Regular corner plot (all parameters)
+            fit.plot_corner()
+            
+            # Subset: only flare parameters
+            fit.plot_corner(subset=['flare_tpeak', 'flare_fwhm', 'flare_ampl_g', 'flare_ampl_r'])
+            
+            # Subset: only transit parameters  
+            fit.plot_corner(subset=['t0', 'ror', 'b', 'dur'])
+        """
         logging.info('generating corner plot')
         fig = plot.corner(
             self.trace,
@@ -498,7 +520,9 @@ class TransitFit:
             self.chromatic,
             sigma_lc=sigma_lc,
             include_flare=include_flare&self.include_flare,
-            include_bump=include_bump&self.include_bump
+            chromatic_flare=self.chromatic_flare,
+            include_bump=include_bump&self.include_bump,
+            subset=subset
         )
         if fn is None:
             fn = 'corner.png'
