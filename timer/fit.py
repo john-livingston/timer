@@ -472,7 +472,7 @@ class TransitFit:
         if plot_fit:
             self.plot_multi(fn='fit.png')
             if self.chromatic:
-                fig = plot.plot_chromatic_ror(self.trace, self.bands, nplanets=self.nplanets)
+                fig = plot.plot_chromatic_ror(self.trace, self.bands, nplanets=self.nplanets, planets=self.planets)
                 fig.savefig(os.path.join(self.outdir, 'chromatic_ror.png'), dpi=300, bbox_inches='tight')
             self.plot_limb_darkening()
         if plot_systematics:

@@ -371,63 +371,88 @@ def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kw
     return fig
 
 
-def plot_chromatic_ror(trace, bands, nplanets=1, figsize=(6,4)):
-    
+def plot_chromatic_ror(trace, bands, nplanets=1, planets=None, figsize=(6,4)):
+
     from matplotlib.patches import Rectangle
 
-    post_vals = []
-    for band in bands:
-        if nplanets > 1:
-            # TBD
-            pass
-        else:
-            post_vals.append(trace.posterior[f'ror_{band}'].values.flatten())
-
-    # Create figure and axis
-    plt.figure(figsize=figsize)
-    ax = plt.gca()
+    # Create figure with subplots for each planet
+    if nplanets > 1:
+        fig, axes = plt.subplots(1, nplanets, figsize=(figsize[0]*nplanets, figsize[1]),
+                                 squeeze=False, sharey=False)
+        axes = axes.flatten()
+    else:
+        fig = plt.figure(figsize=figsize)
+        axes = [plt.gca()]
 
     # X positions for the bands
     x_pos = np.arange(len(bands))
 
-    # Add shaded regions for 1-sigma and 2-sigma credible intervals
-    for i, vals in enumerate(post_vals):
-        p2, p16, p50, p84, p98 = np.percentile(vals, [2.5, 16, 50, 84, 97.5])
-        plt.plot([i - 0.25, i + 0.25], [p50, p50], '-', color='black', linewidth=2)
-        # 2-sigma region (95% credible interval)
-        rect_2sigma = Rectangle((i - 0.25, p2), 0.5, p98-p2, 
-                               lw=0, alpha=0.15, color='gray', label='2-sigma' if i == 0 else "")
-        
-        # 1-sigma region (68% credible interval)
-        rect_1sigma = Rectangle((i - 0.25, p16), 0.5, p84-p16, 
-                               lw=0, alpha=0.3, color='gray', label='1-sigma' if i == 0 else "")
-        
-        # Add the rectangles to the plot
-        ax.add_patch(rect_2sigma)
-        ax.add_patch(rect_1sigma)
+    # Process each planet
+    for planet_idx in range(nplanets):
+        ax = axes[planet_idx]
+        plt.sca(ax)
 
-    # Add text labels with the values and uncertainties
-    for i, vals in enumerate(post_vals):
-        mean, sigma = np.mean(vals), np.std(vals)
-        plt.text(i, np.percentile(vals, 97.5) + 0.2*sigma, f"{mean:.4f} $\\pm$ {sigma:.4f}", 
-                 ha='center', va='bottom', fontsize=9)
+        # Collect posterior values for this planet across all bands
+        post_vals = []
+        for band in bands:
+            if nplanets > 1:
+                # trace.posterior['ror_S1'] has shape (chain, draw, nplanets)
+                ror_band = trace.posterior[f'ror_{band}'].values
+                # Flatten chains and draws, keeping planet dimension separate
+                ror_flattened = ror_band.reshape(-1, nplanets)
+                post_vals.append(ror_flattened[:, planet_idx])
+            else:
+                post_vals.append(trace.posterior[f'ror_{band}'].values.flatten())
 
-    # Set x-axis ticks and labels
-    plt.xticks(x_pos, bands, fontsize=12)
-    plt.xlim(-0.5, len(bands) - 0.5)
+        # Add shaded regions for 1-sigma and 2-sigma credible intervals
+        for i, vals in enumerate(post_vals):
+            p2, p16, p50, p84, p98 = np.percentile(vals, [2.5, 16, 50, 84, 97.5])
+            ax.plot([i - 0.25, i + 0.25], [p50, p50], '-', color='black', linewidth=2)
+            # 2-sigma region (95% credible interval)
+            rect_2sigma = Rectangle((i - 0.25, p2), 0.5, p98-p2,
+                                   lw=0, alpha=0.15, color='gray', label='2-sigma' if i == 0 else "")
 
-    # Set y-axis limits with some padding
-    y_min = min([np.percentile(v, 2.5) for v in post_vals])
-    y_max = max([np.percentile(v, 97.5) for v in post_vals])
-    y_pad = 0.2 * (y_max - y_min)
-    plt.ylim(y_min - y_pad, y_max + y_pad)
+            # 1-sigma region (68% credible interval)
+            rect_1sigma = Rectangle((i - 0.25, p16), 0.5, p84-p16,
+                                   lw=0, alpha=0.3, color='gray', label='1-sigma' if i == 0 else "")
 
-    # Add labels and title
-    plt.ylabel('$R_p/R_s$', fontsize=12)
+            # Add the rectangles to the plot
+            ax.add_patch(rect_2sigma)
+            ax.add_patch(rect_1sigma)
 
-    # Add grid for better readability
-    plt.grid(True, linestyle='--', alpha=0.7)
-    return plt.gcf()
+        # Add text labels with the values and uncertainties
+        for i, vals in enumerate(post_vals):
+            mean, sigma = np.mean(vals), np.std(vals)
+            ax.text(i, np.percentile(vals, 97.5) + 0.2*sigma, f"{mean:.4f} $\\pm$ {sigma:.4f}",
+                     ha='center', va='bottom', fontsize=9)
+
+        # Set x-axis ticks and labels
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(bands, fontsize=12)
+        ax.set_xlim(-0.5, len(bands) - 0.5)
+
+        # Set y-axis limits with some padding
+        y_min = min([np.percentile(v, 2.5) for v in post_vals])
+        y_max = max([np.percentile(v, 97.5) for v in post_vals])
+        y_pad = 0.2 * (y_max - y_min)
+        ax.set_ylim(y_min - y_pad, y_max + y_pad)
+
+        # Add labels and title
+        if planet_idx == 0:
+            ax.set_ylabel('$R_p/R_s$', fontsize=12)
+
+        # Add title with planet letter or number
+        if nplanets > 1:
+            if planets is not None and planet_idx < len(planets):
+                ax.set_title(f'Planet {planets[planet_idx]}', fontsize=12)
+            else:
+                ax.set_title(f'Planet {planet_idx + 1}', fontsize=12)
+
+        # Add grid for better readability
+        ax.grid(True, linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    return fig
 
 def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False, 
     include_flare=False, include_bump=False,

@@ -283,12 +283,6 @@ def build(
                 shape=nbumps,
                 verbose=verbose
             )
-            bump_ampl = get_rv(
-                key='bump_ampl',
-                priors=priors,
-                shape=nbumps,
-                verbose=verbose
-            )
             # Band-dependent bump amplitude (chromatic_bump)
             if chromatic_bump:
                 for band in bands:
@@ -300,6 +294,13 @@ def build(
                         shape=nbumps,
                         verbose=verbose
                     )
+            else:
+                bump_ampl = get_rv(
+                    key='bump_ampl',
+                    priors=priors,
+                    shape=nbumps,
+                    verbose=verbose
+                )
 
         # parameters for the planets
         for p in "t0 period ror b".split():

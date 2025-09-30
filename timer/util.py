@@ -167,15 +167,20 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
                     priors[f'{par}_unc'] = bounds_array[:, 1] - bounds_array[:, 0]
                     # Store the center point as the parameter value for bounds calculation
                     priors[par] = (bounds_array[:, 0] + bounds_array[:, 1]) / 2
+                    # Clip initval to be within bounds (with small epsilon to avoid boundary issues)
+                    epsilon = 1e-10
+                    clipped = np.clip(original_mean, bounds_array[:, 0] + epsilon, bounds_array[:, 1] - epsilon)
+                    priors[f'{par}_initval'] = clipped
                 else:
                     # Single bounds for all planets (backward compatibility)
                     bounds = np.array(bounds_input)
                     priors[f'{par}_unc'] = bounds[1] - bounds[0]
                     # Store the center point as the parameter value for bounds calculation
                     priors[par] = np.array([(bounds[0] + bounds[1]) / 2] * len(planets))
-
-                # Store the original mean for use as initval
-                priors[f'{par}_initval'] = original_mean
+                    # Clip initval to be within bounds (with small epsilon to avoid boundary issues)
+                    epsilon = 1e-10
+                    clipped = np.clip(original_mean, bounds[0] + epsilon, bounds[1] - epsilon)
+                    priors[f'{par}_initval'] = clipped
             else:
                 # assume gaussian
                 priors[f'{par}_prior'] = 'gaussian'
