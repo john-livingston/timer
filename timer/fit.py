@@ -254,6 +254,17 @@ class TransitFit:
                 logging.info('loading trace from trace.pkl')
                 self.trace = pickle.load(open(os.path.join(self.outdir, 'trace.pkl'), 'rb'))
 
+    def _add_log_sigma_lc_priors(self):
+        """Add log_sigma_lc priors for each dataset based on data std"""
+        for name, data in self.data.items():
+            y = data['y']
+            mask = self.masks.get(name, np.ones(len(y), dtype=bool))
+            lower = -10
+            upper = np.log(10*np.std(y[mask]))
+            self.priors[f'{name}_log_sigma_lc'] = (upper+lower)/2
+            self.priors[f'{name}_log_sigma_lc_unc'] = upper-lower
+            self.priors[f'{name}_log_sigma_lc_prior'] = 'uniform'
+
     def plot_data(self):
         logging.info("plotting data")
         for name,data in self.data.items():
@@ -272,10 +283,12 @@ class TransitFit:
         x_mean = np.mean([v['x'].mean() for k,v in self.data.items()])
         tc_guess, tc_guess_unc = util.get_tc_prior(self.fit_params, x_mean, self.ref_time)
         self.priors = util.get_priors(
-            self.fit_basis, self.sys_params['star'], 
+            self.fit_basis, self.sys_params['star'],
             planets, self.fixed, self.bands,
             tc_guess, tc_guess_unc, uniform=self.uniform
         )
+        # Add log_sigma_lc priors based on data
+        self._add_log_sigma_lc_priors()
         if self.include_flare:
             # Determine number of flares from vector length (use tpeak as reference)
             if isinstance(self.flare['tpeak'], (list, tuple)):

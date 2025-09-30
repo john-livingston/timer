@@ -295,9 +295,17 @@ def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kw
 
             # Check if this is a flare or bump parameter with multiple components
             if len(name_parts) >= 3 and name_parts[0] in ['flare', 'bump'] and name_parts[-1].isdigit():
-                # e.g., 'flare_tpeak_1', 'bump_ampl_2'
-                par_base = '_'.join(name_parts[:-1])  # 'flare_tpeak', 'bump_ampl'
+                # e.g., 'flare_tpeak_1', 'bump_ampl_2', 'bump_ampl_S1_1' (chromatic)
+                par_with_num = '_'.join(name_parts[:-1])  # 'flare_tpeak', 'bump_ampl', 'bump_ampl_S1'
                 component_num = int(name_parts[-1])
+
+                # For chromatic parameters, strip the band suffix to get the base parameter
+                # e.g., 'bump_ampl_S1' -> 'bump_ampl', 'flare_ampl_g' -> 'flare_ampl'
+                if len(name_parts) >= 4 and name_parts[0] in ['flare', 'bump'] and name_parts[1] == 'ampl':
+                    # Chromatic amplitude: 'bump_ampl_S1_1' -> base is 'bump_ampl'
+                    par_base = '_'.join(name_parts[:2])  # 'bump_ampl' or 'flare_ampl'
+                else:
+                    par_base = par_with_num
 
                 if par_base not in priors.keys():
                     continue
