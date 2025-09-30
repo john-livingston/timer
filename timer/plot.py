@@ -40,122 +40,47 @@ def plot_outliers(x, resid, mask, fp=None):
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
            chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, show_prior=True, subset=None):
 
-    # If subset is specified, use the subset functionality with same plotting style
+    # If subset is specified, use it directly
     if subset is not None:
-        return corner_subset(trace, soln, priors, subset, show_prior=show_prior)
-
-    var_names = [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
-    trace_ = trace.posterior['t0'].values.reshape(-1, nplanets)
-    truths = soln['t0']
-    i = nplanets
-    for par in 'dur period b'.split():
-        if par not in fixed:
-            var_names += [f'{par}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, nplanets)]
-            truths = np.append(truths, soln[par])
-    if 'ror' not in fixed:
-        if chromatic:
-            for band in bands:
-                if nplanets > 1:
-                    var_names += [f'ror_{band}_{i+1}' for i in range(nplanets)]
-                else:
-                    var_names += [f'ror_{band}']
-                trace_ = np.c_[trace_, trace.posterior[f'ror_{band}'].values.reshape(-1, nplanets)]
-                truths = np.append(truths, soln[f'ror_{band}'])
-        else:
-            var_names += [f'ror_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['ror']
-            trace_ = np.c_[trace_, trace.posterior['ror'].values.reshape(-1, nplanets)]
-            truths = np.append(truths, soln['ror'])
-    if sigma_lc:
-        for name in data.keys():
-            par = f'{name}_log_sigma_lc'
-            var_names += [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-            truths = np.append(truths, soln[par])
-    if include_flare:
-        # Shared flare parameters (tpeak and fwhm)
-        for p in 'tpeak fwhm'.split():
-            par = f'flare_{p}'
-            var_names += [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-            truths = np.append(truths, soln[par])
+        param_names = subset
+    else:
+        # Build parameter list using existing logic
+        param_names = []
         
-        # Flare amplitude - chromatic or shared
-        if chromatic_flare:
-            for band in bands:
-                par = f'flare_ampl_{band}'
-                var_names += [par]
-                trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-                truths = np.append(truths, soln[par])
-        else:
-            par = 'flare_ampl'
-            var_names += [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-            truths = np.append(truths, soln[par])
-    if include_bump:
-        for p in 'tcenter width ampl'.split():
-            par = f'bump_{p}'
-            var_names += [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-            truths = np.append(truths, soln[par])
-
-    import corner
-
-    ndim = len(var_names)
-    figsize = (2.2*ndim,2.2*ndim)
-    fig, axs = plt.subplots(ndim, ndim, figsize=figsize)
-
-    hist_kwargs = dict(lw=1, alpha=1, density=True)
-    title_kwargs = dict(fontdict=dict(fontsize=12))
-    data_kwargs = dict(alpha=0.01)
-
-    fig = corner.corner(
-        trace_,
-        fig=fig,
-        labels=var_names,
-        truths=truths,
-        truth_color='dodgerblue',
-        hist_kwargs=hist_kwargs,
-        title_kwargs=title_kwargs,
-        data_kwargs=data_kwargs,
-        smooth=1,
-#         smooth1d=1,
-        show_titles=True,
-        title_fmt='.4f'
-    )
-
-    if show_prior:
-
-        import scipy.stats as st
-        prior_kwargs = dict(lw=3, color='darkorange', zorder=-10, alpha=0.75)
-        axs_diag = np.diag(axs)
-        for name,ax in zip(var_names, axs_diag):
-            if nplanets > 1:
-                par = name.split('_')[0]
-                if par not in priors.keys(): continue
-                pnum = int(name.split('_')[-1])
-                mu = priors[par][pnum-1]
-                unc = priors[f'{par}_unc'][pnum-1]
+        # Transit parameters
+        param_names += [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
+        
+        for par in 'dur period b'.split():
+            if par not in fixed:
+                param_names += [f'{par}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [par]
+        
+        if 'ror' not in fixed:
+            if chromatic:
+                for band in bands:
+                    param_names += [f'ror_{band}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [f'ror_{band}']
             else:
-                if 'ror' in name and chromatic:
-                    par = name.split('_')[0]
-                else:
-                    par = name
-                if par not in priors.keys(): continue
-                mu = priors[par]
-                unc = priors[f'{par}_unc']
-            dist = priors[f'{par}_prior']
-            xlim = ax.get_xlim()
-            if dist == 'uniform':
-                a, b = mu-unc/2,mu+unc/2
-                ax.axhline(1/(b-a), **prior_kwargs)
-            elif dist == 'gaussian':
-#                 xi = np.linspace(mu-4*unc,mu+4*unc)
-                xi = np.linspace(*ax.get_xlim())
-                ax.plot(xi, st.norm.pdf(xi, loc=mu, scale=unc), **prior_kwargs)
-            plt.setp(ax, xlim=xlim)
+                param_names += [f'ror_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['ror']
+        
+        if sigma_lc:
+            for name in data.keys():
+                param_names.append(f'{name}_log_sigma_lc')
+        
+        if include_flare:
+            # Shared flare parameters (tpeak and fwhm)
+            param_names += ['flare_tpeak', 'flare_fwhm']
+            
+            # Flare amplitude - chromatic or shared
+            if chromatic_flare:
+                for band in bands:
+                    param_names.append(f'flare_ampl_{band}')
+            else:
+                param_names.append('flare_ampl')
+        
+        if include_bump:
+            param_names += ['bump_tcenter', 'bump_width', 'bump_ampl']
 
-    return fig
+    # Use generalized plotting function
+    return corner_subset(trace, soln, priors, param_names, show_prior=show_prior)
 
 def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kwargs):
     """
@@ -197,7 +122,7 @@ def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kw
     
     # Use exact same plotting style as main corner function
     fig = None
-    hist_kwargs = dict(density=True, alpha=0.6, color='dodgerblue', lw=1.5, ls='-')
+    hist_kwargs = dict(density=True, alpha=0.6, color='k', lw=1.5, ls='-')
     title_kwargs = dict(fontsize=8)
     data_kwargs = dict(alpha=0.01)
 
@@ -260,6 +185,7 @@ def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kw
                     pass  # Skip if prior info not available
     
     return fig
+
 
 def plot_chromatic_ror(trace, bands, nplanets=1, figsize=(6,4)):
     
