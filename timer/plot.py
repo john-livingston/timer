@@ -40,129 +40,202 @@ def plot_outliers(x, resid, mask, fp=None):
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
            chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, show_prior=True, subset=None):
 
-    # If subset is specified, use the subset functionality with same plotting style
+    # If subset is specified, expand multi-component parameters if needed
     if subset is not None:
-        return corner_subset(trace, soln, priors, subset, show_prior=show_prior)
-
-    var_names = [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
-    trace_ = trace.posterior['t0'].values.reshape(-1, nplanets)
-    truths = soln['t0']
-    i = nplanets
-    for par in 'dur period b'.split():
-        if par not in fixed:
-            var_names += [f'{par}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, nplanets)]
-            truths = np.append(truths, soln[par])
-    if 'ror' not in fixed:
-        if chromatic:
-            for band in bands:
-                if nplanets > 1:
-                    var_names += [f'ror_{band}_{i+1}' for i in range(nplanets)]
+        param_names = []
+        for param in subset:
+            if param in trace.posterior:
+                param_trace = trace.posterior[param].values
+                # Check if this is a multi-component parameter that needs expansion
+                if param_trace.ndim == 3 and param_trace.shape[2] > 1:
+                    # Multi-component parameter - expand to numbered components
+                    ncomponents = param_trace.shape[2]
+                    for i in range(ncomponents):
+                        param_names.append(f'{param}_{i+1}')
                 else:
-                    var_names += [f'ror_{band}']
-                trace_ = np.c_[trace_, trace.posterior[f'ror_{band}'].values.reshape(-1, nplanets)]
-                truths = np.append(truths, soln[f'ror_{band}'])
-        else:
-            var_names += [f'ror_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['ror']
-            trace_ = np.c_[trace_, trace.posterior['ror'].values.reshape(-1, nplanets)]
-            truths = np.append(truths, soln['ror'])
-    if sigma_lc:
-        for name in data.keys():
-            par = f'{name}_log_sigma_lc'
-            var_names += [par]
-            trace_ = np.c_[trace_, trace.posterior[par].values.reshape(-1, 1)]
-            truths = np.append(truths, soln[par])
-    if include_flare:
-        # Shared flare parameters (tpeak and fwhm)
-        for p in 'tpeak fwhm'.split():
-            par = f'flare_{p}'
-            if par in trace.posterior:
-                param_trace = trace.posterior[par].values
-                param_soln = soln[par]
-
-                # Handle multiple flares
-                if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nflares)
-                    nflares = param_trace.shape[2]
-                    for i in range(nflares):
-                        var_names += [f'{par}_{i+1}']
-                        trace_ = np.c_[trace_, param_trace[:, :, i].reshape(-1, 1)]
-                        truths = np.append(truths, param_soln[i])
-                else:
-                    # Single flare
-                    var_names += [par]
-                    trace_ = np.c_[trace_, param_trace.reshape(-1, 1)]
-                    truths = np.append(truths, param_soln.flatten()[0] if hasattr(param_soln, 'flatten') else param_soln)
-
-        # Flare amplitude - chromatic or shared
-        if chromatic_flare:
-            for band in bands:
-                par = f'flare_ampl_{band}'
+                    # Single component parameter
+                    param_names.append(param)
+            else:
+                # Parameter not in trace - keep as is (might be already numbered)
+                param_names.append(param)
+    else:
+        # Build parameter list using existing logic (with multi-flare/bump support)
+        param_names = []
+        
+        # Transit parameters
+        param_names += [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
+        
+        for par in 'dur period b'.split():
+            if par not in fixed:
+                param_names += [f'{par}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [par]
+        
+        if 'ror' not in fixed:
+            if chromatic:
+                for band in bands:
+                    param_names += [f'ror_{band}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [f'ror_{band}']
+            else:
+                param_names += [f'ror_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['ror']
+        
+        if sigma_lc:
+            for name in data.keys():
+                param_names.append(f'{name}_log_sigma_lc')
+        
+        if include_flare:
+            # Shared flare parameters (tpeak and fwhm) - check for multi-flare
+            for p in 'tpeak fwhm'.split():
+                par = f'flare_{p}'
                 if par in trace.posterior:
                     param_trace = trace.posterior[par].values
-                    param_soln = soln[par]
-
-                    # Handle multiple flares for chromatic amplitude
+                    # Handle multiple flares
                     if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nflares)
                         nflares = param_trace.shape[2]
                         for i in range(nflares):
-                            var_names += [f'{par}_{i+1}']
-                            trace_ = np.c_[trace_, param_trace[:, :, i].reshape(-1, 1)]
-                            truths = np.append(truths, param_soln[i])
+                            param_names.append(f'{par}_{i+1}')
                     else:
                         # Single flare
-                        var_names += [par]
-                        trace_ = np.c_[trace_, param_trace.reshape(-1, 1)]
-                        truths = np.append(truths, param_soln.flatten()[0] if hasattr(param_soln, 'flatten') else param_soln)
-        else:
-            par = 'flare_ampl'
-            if par in trace.posterior:
-                param_trace = trace.posterior[par].values
-                param_soln = soln[par]
+                        param_names.append(par)
+            
+            # Flare amplitude - chromatic or shared
+            if chromatic_flare:
+                for band in bands:
+                    par = f'flare_ampl_{band}'
+                    if par in trace.posterior:
+                        param_trace = trace.posterior[par].values
+                        # Handle multiple flares for chromatic amplitude
+                        if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nflares)
+                            nflares = param_trace.shape[2]
+                            for i in range(nflares):
+                                param_names.append(f'{par}_{i+1}')
+                        else:
+                            # Single flare
+                            param_names.append(par)
+            else:
+                par = 'flare_ampl'
+                if par in trace.posterior:
+                    param_trace = trace.posterior[par].values
+                    # Handle multiple flares for shared amplitude
+                    if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nflares)
+                        nflares = param_trace.shape[2]
+                        for i in range(nflares):
+                            param_names.append(f'{par}_{i+1}')
+                    else:
+                        # Single flare
+                        param_names.append(par)
+        
+        if include_bump:
+            for p in 'tcenter width ampl'.split():
+                par = f'bump_{p}'
+                if par in trace.posterior:
+                    param_trace = trace.posterior[par].values
+                    # Handle multiple bumps
+                    if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nbumps)
+                        nbumps = param_trace.shape[2]
+                        for i in range(nbumps):
+                            param_names.append(f'{par}_{i+1}')
+                    else:
+                        # Single bump
+                        param_names.append(par)
 
-                # Handle multiple flares for shared amplitude
-                if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nflares)
-                    nflares = param_trace.shape[2]
-                    for i in range(nflares):
-                        var_names += [f'{par}_{i+1}']
-                        trace_ = np.c_[trace_, param_trace[:, :, i].reshape(-1, 1)]
-                        truths = np.append(truths, param_soln[i])
-                else:
-                    # Single flare
-                    var_names += [par]
-                    trace_ = np.c_[trace_, param_trace.reshape(-1, 1)]
-                    truths = np.append(truths, param_soln.flatten()[0] if hasattr(param_soln, 'flatten') else param_soln)
-    if include_bump:
-        for p in 'tcenter width ampl'.split():
-            par = f'bump_{p}'
-            if par in trace.posterior:
-                param_trace = trace.posterior[par].values
-                param_soln = soln[par]
+    # Use generalized plotting function
+    return corner_subset(trace, soln, priors, param_names, show_prior=show_prior)
 
-                # Handle multiple bumps
-                if param_trace.ndim == 3 and param_trace.shape[2] > 1:  # (chains, draws, nbumps)
-                    nbumps = param_trace.shape[2]
-                    for i in range(nbumps):
-                        var_names += [f'{par}_{i+1}']
-                        trace_ = np.c_[trace_, param_trace[:, :, i].reshape(-1, 1)]
-                        truths = np.append(truths, param_soln[i])
-                else:
-                    # Single bump
-                    var_names += [par]
-                    trace_ = np.c_[trace_, param_trace.reshape(-1, 1)]
-                    truths = np.append(truths, param_soln.flatten()[0] if hasattr(param_soln, 'flatten') else param_soln)
-
+def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kwargs):
+    """
+    Create a corner plot for a specific subset of parameters.
+    """
     import corner
-
-    ndim = len(var_names)
-    figsize = (2.2*ndim,2.2*ndim)
-    fig, axs = plt.subplots(ndim, ndim, figsize=figsize)
-
-    hist_kwargs = dict(lw=1, alpha=1, density=True)
-    title_kwargs = dict(fontdict=dict(fontsize=12))
+    import scipy.stats as st
+    
+    # Build trace array and truths for specified parameters
+    trace_list = []
+    truths = []
+    var_names = []
+    
+    for param in param_names:
+        # Handle numbered parameters (e.g., flare_tpeak_1, bump_ampl_2)
+        if param.endswith(tuple(f'_{i}' for i in range(1, 10))) and '_' in param:
+            # Extract base parameter and component number
+            parts = param.split('_')
+            component_num = int(parts[-1]) - 1  # Convert to 0-based index
+            base_param = '_'.join(parts[:-1])
+            
+            if base_param in trace.posterior:
+                param_trace = trace.posterior[base_param].values
+                param_soln = soln[base_param] if base_param in soln else None
+                
+                # Handle multi-component parameters
+                if param_trace.ndim == 3 and param_trace.shape[2] > component_num:
+                    samples = param_trace[:, :, component_num].reshape(-1)
+                    if param_soln is not None:
+                        if hasattr(param_soln, '__len__') and len(param_soln) > component_num:
+                            truth_val = param_soln[component_num]
+                            # Extract scalar from array if needed
+                            if hasattr(truth_val, '__len__') and len(truth_val) == 1:
+                                truth_val = truth_val[0]
+                        else:
+                            truth_val = param_soln
+                    else:
+                        truth_val = np.median(samples)
+                else:
+                    print(f"Warning: Component {component_num+1} not found for parameter '{base_param}'")
+                    continue
+                    
+                trace_list.append(samples)
+                truths.append(truth_val)
+                var_names.append(param)
+            else:
+                print(f"Warning: Base parameter '{base_param}' not found in trace")
+        elif param in trace.posterior:
+            # Regular single-component parameter
+            param_trace = trace.posterior[param].values
+            param_soln = soln[param] if param in soln else None
+            
+            if param_trace.ndim == 3 and param_trace.shape[2] == 1:
+                # Single component in 3D array
+                samples = param_trace[:, :, 0].reshape(-1)
+                if param_soln is not None:
+                    truth_val = param_soln.flatten()[0] if hasattr(param_soln, 'flatten') else param_soln
+                    # Ensure it's a scalar
+                    if hasattr(truth_val, '__len__') and len(truth_val) == 1:
+                        truth_val = truth_val[0]
+                else:
+                    truth_val = np.median(samples)
+            else:
+                # Regular parameter
+                samples = param_trace.reshape(-1)
+                if param_soln is not None:
+                    if hasattr(param_soln, 'flatten'):
+                        flat_val = param_soln.flatten()
+                        truth_val = flat_val[0] if len(flat_val) == 1 else param_soln
+                    else:
+                        truth_val = param_soln
+                    # Ensure it's a scalar
+                    if hasattr(truth_val, '__len__') and len(truth_val) == 1:
+                        truth_val = truth_val[0]
+                else:
+                    truth_val = np.median(samples)
+            
+            trace_list.append(samples)
+            truths.append(truth_val)
+            var_names.append(param)
+        else:
+            print(f"Warning: Parameter '{param}' not found in trace")
+    
+    if not trace_list:
+        raise ValueError("No valid parameters found in trace")
+    
+    # Convert to array
+    trace_array = np.column_stack(trace_list)
+    truths = np.array(truths)
+    
+    # Use exact same plotting style as main corner function
+    fig = None
+    hist_kwargs = dict(density=True, alpha=0.6, color='k', lw=1.5, ls='-')
+    title_kwargs = dict(fontsize=8)
     data_kwargs = dict(alpha=0.01)
 
     fig = corner.corner(
-        trace_,
+        trace_array,
         fig=fig,
         labels=var_names,
         truths=truths,
@@ -171,21 +244,24 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
         title_kwargs=title_kwargs,
         data_kwargs=data_kwargs,
         smooth=1,
-#         smooth1d=1,
         show_titles=True,
         title_fmt='.4f'
     )
-
+    
+    # Add priors if requested
     if show_prior:
-
         import scipy.stats as st
-        prior_kwargs = dict(lw=3, color='darkorange', zorder=-10, alpha=0.75)
-        # Handle case where axs is a scalar (single subplot) or 2D array
+        # Handle case where axes is a scalar (single subplot) or 2D array
+        ndim = len(var_names)
         if ndim == 1:
-            axs_diag = [axs]
+            axs_diag = [fig.axes[0]]
         else:
-            axs_diag = np.diag(axs)
-        for name,ax in zip(var_names, axs_diag):
+            axes = np.array(fig.axes).reshape((ndim, ndim))
+            axs_diag = np.diag(axes)
+        
+        prior_kwargs = dict(lw=3, color='darkorange', zorder=-10, alpha=0.75)
+        
+        for name, ax in zip(var_names, axs_diag):
             # Handle different parameter types
             name_parts = name.split('_')
 
@@ -211,10 +287,11 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
 
                 dist = priors[f'{par_base}_prior']
 
-            elif nplanets > 1 and name_parts[-1].isdigit() and name_parts[0] not in ['flare', 'bump']:
-                # Planet parameters like 't0_1', 'ror_2'
+            elif len(name_parts) >= 2 and name_parts[-1].isdigit() and name_parts[0] not in ['flare', 'bump']:
+                # Planet parameters like 't0_1', 'ror_2' 
                 par = name_parts[0]
-                if par not in priors.keys(): continue
+                if par not in priors.keys(): 
+                    continue
                 pnum = int(name_parts[-1])
 
                 # Handle both scalar and array priors
@@ -231,9 +308,16 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
                 dist = priors[f'{par}_prior']
 
             else:
-                # Single component parameters or chromatic ror
-                if 'ror' in name and chromatic:
+                # Single component parameters or chromatic parameters
+                if 'ror' in name and len(name_parts) >= 2:
+                    # Chromatic ror like 'ror_g'
                     par = name_parts[0]
+                elif len(name_parts) >= 3 and name_parts[0] == 'flare' and name_parts[1] == 'ampl':
+                    # Chromatic flare amplitude like 'flare_ampl_g'
+                    par = 'flare_ampl'
+                elif len(name_parts) >= 3 and name_parts[0] == 'bump' and name_parts[1] == 'ampl':
+                    # Chromatic bump amplitude like 'bump_ampl_g' 
+                    par = 'bump_ampl'
                 else:
                     par = name
 
@@ -243,121 +327,21 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
                 mu = priors[par]
                 unc = priors[f'{par}_unc']
                 dist = priors[f'{par}_prior']
-            xlim = ax.get_xlim()
-            if dist == 'uniform':
-                a, b = mu-unc/2,mu+unc/2
-                ax.axhline(1/(b-a), **prior_kwargs)
-            elif dist == 'gaussian':
-#                 xi = np.linspace(mu-4*unc,mu+4*unc)
-                xi = np.linspace(*ax.get_xlim())
-                ax.plot(xi, st.norm.pdf(xi, loc=mu, scale=unc), **prior_kwargs)
-            plt.setp(ax, xlim=xlim)
-
+            
+            try:
+                xlim = ax.get_xlim()
+                if dist == 'uniform':
+                    a, b = mu-unc/2, mu+unc/2
+                    ax.axhline(1/(b-a), **prior_kwargs)
+                elif dist == 'gaussian':
+                    xi = np.linspace(*ax.get_xlim())
+                    ax.plot(xi, st.norm.pdf(xi, loc=mu, scale=unc), **prior_kwargs)
+                plt.setp(ax, xlim=xlim)
+            except KeyError:
+                pass  # Skip if prior info not available
+    
     return fig
 
-def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kwargs):
-    """
-    Create a corner plot for a specific subset of parameters.
-    """
-    import corner
-    import scipy.stats as st
-    
-    # Build trace array and truths for specified parameters
-    trace_list = []
-    truths = []
-    var_names = []
-    
-    for param in param_names:
-        if param in trace.posterior:
-            # Get posterior samples
-            samples = trace.posterior[param].values.reshape(-1)
-            if len(samples.shape) > 1 and samples.shape[1] > 1:
-                # Handle multi-dimensional parameters (flatten if needed)
-                samples = samples.flatten()
-            trace_list.append(samples)
-            
-            # Get MAP value
-            if param in soln:
-                truths.append(soln[param])
-            else:
-                truths.append(np.median(samples))
-                
-            var_names.append(param)
-        else:
-            print(f"Warning: Parameter '{param}' not found in trace")
-    
-    if not trace_list:
-        raise ValueError("No valid parameters found in trace")
-    
-    # Convert to array
-    trace_array = np.column_stack(trace_list)
-    truths = np.array(truths)
-    
-    # Use exact same plotting style as main corner function
-    fig = None
-    hist_kwargs = dict(density=True, alpha=0.6, color='dodgerblue', lw=1.5, ls='-')
-    title_kwargs = dict(fontsize=8)
-    data_kwargs = dict(alpha=0.01)
-
-    fig = corner.corner(
-        trace_array,
-        fig=fig,
-        labels=var_names,
-        truths=truths,
-        truth_color='dodgerblue',
-        hist_kwargs=hist_kwargs,
-        title_kwargs=title_kwargs,
-        data_kwargs=data_kwargs,
-        smooth=1,
-        show_titles=True,
-        title_fmt='.4f'
-    )
-    
-    # Add priors if requested
-    if show_prior:
-        import scipy.stats as st
-        axes = np.array(fig.axes).reshape((len(var_names), len(var_names)))
-        prior_kwargs = dict(lw=3, color='darkorange', zorder=-10, alpha=0.75)
-        
-        for i, param in enumerate(var_names):
-            ax = axes[i, i]  # Diagonal plot
-            
-            # Parse parameter to get base parameter name
-            if param.startswith('flare_'):
-                base_param = param.replace('flare_', '')
-                # Handle band-specific parameters
-                if base_param.startswith('ampl_'):
-                    base_param = 'flare_ampl'
-                elif base_param in ['tpeak', 'fwhm']:
-                    base_param = f'flare_{base_param}'
-            elif param.startswith('bump_'):
-                base_param = param.replace('bump_', '')
-                base_param = f'bump_{base_param}'
-            else:
-                base_param = param
-            
-            # Extract base parameter name without band suffix
-            if '_' in base_param and base_param.split('_')[-1] in ['g', 'r', 'i', 'z', 'T']:
-                base_param = '_'.join(base_param.split('_')[:-1])
-            
-            if base_param in priors:
-                try:
-                    mu = priors[base_param]
-                    unc = priors[f'{base_param}_unc']
-                    dist = priors[f'{base_param}_prior']
-                    
-                    xlim = ax.get_xlim()
-                    if dist == 'uniform':
-                        a, b = mu - unc/2, mu + unc/2
-                        ax.axhline(1/(b-a), **prior_kwargs)
-                    elif dist == 'gaussian':
-                        xi = np.linspace(*ax.get_xlim())
-                        ax.plot(xi, st.norm.pdf(xi, loc=mu, scale=unc), **prior_kwargs)
-                    plt.setp(ax, xlim=xlim)
-                except KeyError:
-                    pass  # Skip if prior info not available
-    
-    return fig
 
 def plot_chromatic_ror(trace, bands, nplanets=1, figsize=(6,4)):
     
