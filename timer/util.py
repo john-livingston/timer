@@ -267,8 +267,8 @@ def get_corrected(data, name, soln, nplanets,
             mean = 0
         lcjit = np.exp(soln[f'{name}_log_sigma_lc'])
         lin_mod = soln[f'{name}_lm']
-        tra_mod = np.sum(soln[f"{name}_light_curves"], axis=-1)
-        tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=-1)
+        tra_mod = np.sum(soln[f"{name}_light_curves"], axis=1)
+        tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=1)
     else:
         if f'{name}_mean' in soln.keys():
             mean = np.median(trace[f"{name}_mean"])
@@ -276,8 +276,8 @@ def get_corrected(data, name, soln, nplanets,
             mean = 0
         lcjit = np.exp(np.median(trace[f'{name}_log_sigma_lc']))
         lin_mod = np.median(trace[f'{name}_lm'], axis=0)
-        tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=-1)
-        tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=-1)
+        tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=1)
+        tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=1)
     
     sys_mod = lin_mod.flatten() + mean
     
