@@ -470,7 +470,7 @@ def build(
             else:
                 ror = v['ror']
             light_curves = (
-                v[f'star_{band}'].get_light_curve(orbit=orbit, r=ror, t=x[mask], texp=texp)
+                v[f'star_{band}'].get_light_curve(orbit=orbit, r=ror, t=x[mask], texp=texp, use_in_transit=False)
                 * 1e3
             )
             pm.Deterministic(f"{name}_light_curves", light_curves)
@@ -479,7 +479,7 @@ def build(
 
             # Compute high-res model light curve
             light_curves_hr = (
-                v[f'star_{band}'].get_light_curve(orbit=orbit, r=ror, t=x_hr, texp=texp)
+                v[f'star_{band}'].get_light_curve(orbit=orbit, r=ror, t=x_hr, texp=texp, use_in_transit=False)
                 * 1e3
             )
             pm.Deterministic(f"{name}_light_curves_hr", light_curves_hr)
@@ -500,7 +500,7 @@ def build(
                 f"{name}_lc_pred",
                 1e3
                 * v[f'star_{band}'].get_light_curve(
-                    orbit=orbit, r=ror, t=x[mask], texp=texp
+                    orbit=orbit, r=ror, t=x[mask], texp=texp, use_in_transit=False
                 )[..., 0],
             )
 
