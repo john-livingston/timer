@@ -619,8 +619,8 @@ class TransitFit:
             values = var_data.values
             
             # Skip large arrays that are not typically needed for analysis
-            # (light curves, linear model predictions, etc.)
-            if var_name.endswith(('_light_curves', '_light_curves_hr', '_lc_pred', '_lm')):
+            # (light curves, linear model predictions, flare/bump models, etc.)
+            if var_name.endswith(('_light_curves', '_light_curves_hr', '_lc_pred', '_lm', '_flare', '_bump')):
                 continue
             
             # Handle different array shapes
