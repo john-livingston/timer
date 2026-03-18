@@ -7,17 +7,15 @@ The `fit.yaml` file configures the data, model, priors, and sampler settings.
 ```yaml
 data:
   g:
-    file: observation_g.csv
+    file: observation_g.txt
     band: g
     trend: 1
     binsize: 0.00139
-    format: afphot
   i:
-    file: observation_i.csv
+    file: observation_i.txt
     band: i
     trend: 1
     binsize: 0.00139
-    format: afphot
 planets: b
 tc_pred: 2460844.98
 tc_pred_unc: 0.04
@@ -54,9 +52,9 @@ Each dataset is listed under `data:` with a user-chosen key. Multiple datasets c
 
 ### Data formats
 
-**`generic`**: A CSV or whitespace-delimited text file with columns `time`, `flux`, `fluxerr` (and optional auxiliary columns).
+**`generic`** (default): A whitespace-delimited text file (`.txt`) with no header row. The first three columns must be `time`, `flux`, `flux_error`, in that order. Any additional columns are automatically used as covariates in the linear detrending model (e.g., airmass, pixel centroids, sky background). Alternatively, a `.csv` file with a header row and columns named `time`, `flux`, `fluxerr` can be used.
 
-**`afphot`**: Same structure but with columns `BJD_TDB`, `Flux`, `Err`.
+**`afphot`**: A CSV file with columns `BJD_TDB`, `Flux`, `Err`.
 
 ## Model
 
