@@ -1,0 +1,39 @@
+data:
+  g:
+    file: HIP67522_240422_muscat4_g_c234_r26.csv
+    band: g
+    # trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+  r:
+    file: HIP67522_240422_muscat4_r_c234_r26.csv
+    band: r
+    # trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+  i:
+    file: HIP67522_240422_muscat4_i_c234_r24.csv
+    band: i
+    # trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+  z:
+    file: HIP67522_240422_muscat4_z_c234_r22.csv
+    band: z
+    # trend: 1
+    spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+planets: c
+tc_pred: 2460423.03
+tc_pred_unc: 0.1
+chromatic: false
+uniform:
+  ror: [0.01,0.15]
+  b: [0,1]
+fixed:
+ - period
+ - u_star

@@ -26,12 +26,9 @@ A Python package for transit fitting analysis.
 
 After installation, you can use the command-line interface:
 
-    timer-fit examples/toi2123
+    timer-fit examples/hip67522
 
-The working directory must contain both `fit.yaml` and `sys.yaml` files. Additional examples:
-
-    timer-fit examples/250801-muscat3
-    timer-fit examples/v1298tau-m2
+The working directory must contain both `fit.yaml` and `sys.yaml` files. 
 
 ## Dependencies
 
