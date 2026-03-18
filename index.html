@@ -585,17 +585,20 @@
 
 
 <h1 id="timer">timer<a class="headerlink" href="#timer" title="Permanent link">&para;</a></h1>
-<p>A Python package for Bayesian transit fitting analysis of exoplanet light curves.</p>
+<p><strong>T</strong>rans<strong>i</strong>t ti<strong>m</strong>ing <strong>e</strong>stimato<strong>r</strong> -- a Python package for robust, efficient, and flexible Bayesian analysis of individual exoplanet transit events.</p>
+<p>The primary goal of <code>timer</code> is to precisely measure transit mid-times from one or more light curves of the same event, with full posterior uncertainties via MCMC. It is designed for the common workflow of fitting a single transit epoch covered by one or more simultaneous datasets (e.g., multi-band photometry from MuSCAT), while incorporating prior knowledge of the system parameters.</p>
+<p>Because all key transit parameters can be assigned either Gaussian or uniform priors, <code>timer</code> is also useful for broader transit analyses beyond timing -- for example, measuring chromatic radius ratios across multiple photometric bands to validate planet candidates or detect atmospheric features (e.g., Na absorption with narrowband spectrophotometry), or characterizing spot-crossing and flare events that overlap with transits.</p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Multi-band simultaneous transit fitting</li>
-<li>Chromatic radius ratio fitting</li>
-<li>Stellar flare and spot-crossing (bump) modeling</li>
-<li>Polynomial and spline detrending</li>
-<li>Limb darkening with theoretical priors</li>
-<li>MCMC sampling via PyMC</li>
-<li>Automated outlier clipping</li>
-<li>Corner plots, trace plots, and publication-quality light curve figures</li>
+<li>Simultaneous fitting of multiple light curves of the same transit event</li>
+<li>Chromatic (per-band) radius ratio fitting for planet validation and spectrophotometry</li>
+<li>Stellar flare modeling (Davenport et al. 2014 analytic profile) with support for multiple flares</li>
+<li>Spot-crossing (Gaussian bump) modeling, including chromatic amplitudes</li>
+<li>Flexible detrending: polynomial trends, B-splines, and arbitrary covariates (e.g., airmass, centroids)</li>
+<li>Theoretical quadratic limb darkening priors via Claret tables</li>
+<li>MCMC posterior sampling via PyMC with automated MAP initialization</li>
+<li>Sigma-clipping of outliers with automatic re-fitting</li>
+<li>Publication-quality outputs: multi-panel light curve fits, corner plots, trace plots, limb darkening diagnostics</li>
 </ul>
 <h2 id="quick-start">Quick start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>git@github.com:john-livingston/timer.git
