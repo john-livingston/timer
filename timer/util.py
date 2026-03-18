@@ -116,13 +116,15 @@ def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, 
 def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, uniform={}):
 
     priors = {}
-    priors['r_star'] = np.array(star['radius'][0])
-    priors['r_star_unc'] = np.array(star['radius'][1])
     if fit_basis == 'mstar/rstar':
+        priors['r_star'] = np.array(star['radius'][0])
+        priors['r_star_unc'] = np.array(star['radius'][1])
         priors['m_star'] = np.array(star['mass'][0])
         priors['m_star_unc'] = np.array(star['mass'][1])
     elif fit_basis == 'duration':
-        pass
+        if 'radius' in star:
+            priors['r_star'] = np.array(star['radius'][0])
+            priors['r_star_unc'] = np.array(star['radius'][1])
     elif fit_basis == 'density':
         raise NotImplementedError
     else:

@@ -219,7 +219,8 @@ def build(
             v[f'star_{band}'] = xo.LimbDarkLightCurve(v[p])
 
         if basis == 'duration':
-            v['r_star'] = priors['r_star']
+            if 'r_star' in priors:
+                v['r_star'] = priors['r_star']
             p = "dur"
             if p in fixed:
                 v[p] = priors[p]
