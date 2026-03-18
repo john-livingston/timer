@@ -1,6 +1,5 @@
 import os
 import dill as pickle
-import re
 import yaml
 import numpy as np
 import pandas as pd
@@ -431,7 +430,7 @@ class TransitFit:
             if self.fit_params['data'][name].get('clip', False):
                 if self.clobber or self.masks[name] is None:
                     x, y = [data.get(i) for i in 'x y'.split()]
-                    map_soln, use_gp = self.map_soln, self.use_gp,
+                    map_soln, use_gp = self.map_soln, self.use_gp
                     clip_nsig = self.fit_params['data'][name].get('clip_nsig', 7)
                     if fn is None:
                         current_fn = f'{name}-outliers.png'

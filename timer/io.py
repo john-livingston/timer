@@ -27,7 +27,8 @@ def read_generic(
 
     # READ DATA
     if fp.endswith('.txt'):
-        ncols = len(open(fp).readline().split())
+        with open(fp) as f:
+            ncols = len(f.readline().split())
         names = 'time flux fluxerr'.split() + [f'c{i}' for i in range(ncols-3)]
         df = pd.read_csv(fp, sep=r'\s+', names=names)
     elif fp.endswith('.csv'):

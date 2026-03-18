@@ -126,7 +126,7 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
         rv = pm.Uniform(name, lower=lower, upper=upper, shape=shape, initval=initval)
         spec = f'{dist}({lower},{upper})'
     else:
-        print(f'dist={dist} not supported')
+        raise ValueError(f'dist={dist} not supported')
     if verbose:
         print(f'{name} ~ {spec}')
     return rv
@@ -349,7 +349,7 @@ def build(
                 ror=ror
             )
         else:
-            print('basis not supported')
+            raise ValueError(f'basis={basis} not supported')
             
         # loop over the datasets
         parameters = dict()
