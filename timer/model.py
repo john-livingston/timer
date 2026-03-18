@@ -80,8 +80,8 @@ def aflare1(t, tpeak, fwhm, ampl, theano=True):
         ix1 = (t > tpeak - fwhm) & (t <= tpeak)
         ix2 = t > tpeak
         flare = np.zeros_like(t)
-        flare[ix1] = fun1(t[ix1])
-        flare[ix2] = fun2(t[ix2])
+        flare[ix1] = f1[ix1]
+        flare[ix2] = f2[ix2]
 
     return flare * ampl
 
