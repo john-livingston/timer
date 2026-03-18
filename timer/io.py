@@ -110,11 +110,15 @@ def read_generic(
     # DISCARD BAD DATA (HIGH AIRMASS) AT THE BEGINNING OF THE TIME SERIES
     if trim_beg is not None:
         ix = x > x.min() + trim_beg
-        x, y, yerr, X = x[ix], y[ix], yerr[ix], X[ix]
+        x, y, yerr = x[ix], y[ix], yerr[ix]
+        if X is not None:
+            X = X[ix]
 
     if trim_end is not None:
         ix = x < x.max() - trim_end
-        x, y, yerr, X = x[ix], y[ix], yerr[ix], X[ix]
+        x, y, yerr = x[ix], y[ix], yerr[ix]
+        if X is not None:
+            X = X[ix]
 
     # COMPUTE APPROXIMATE EXPOSURE TIME
     texp = np.median(np.diff(x))

@@ -128,7 +128,7 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
     elif fit_basis == 'density':
         raise NotImplementedError
     else:
-        print("basis not supported")
+        raise ValueError(f"fit_basis={fit_basis} not supported")
 
     bands_ = [f'{band}*' if band in 'griz' else band for band in bands]
     ldp = [ld.claret(band, *star['teff'], *star['logg'], *star['feh']) for band in bands_]
