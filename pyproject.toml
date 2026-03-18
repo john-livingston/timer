@@ -51,9 +51,9 @@ dev = [
 timer-fit = "timer.fit:cli"
 
 [project.urls]
-Homepage = "https://gitlab.com/john-livingston/timer"
-Repository = "https://gitlab.com/john-livingston/timer.git"
-Issues = "https://gitlab.com/john-livingston/timer/-/issues"
+Homepage = "https://github.com/john-livingston/timer"
+Repository = "https://github.com/john-livingston/timer.git"
+Issues = "https://github.com/john-livingston/timer/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

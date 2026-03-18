@@ -21,7 +21,7 @@ Because all key transit parameters can be assigned either Gaussian or uniform pr
 ## Quick start
 
 ```bash
-git clone git@github.com:john-livingston/timer.git
+git clone https://github.com/john-livingston/timer.git
 cd timer
 pip install -e .
 pip install git+https://github.com/john-livingston/limbdark

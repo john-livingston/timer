@@ -7,7 +7,7 @@
 ## Install
 
 ```bash
-git clone git@github.com:john-livingston/timer.git
+git clone https://github.com/john-livingston/timer.git
 cd timer
 conda create -n timer python=3.13
 conda activate timer
