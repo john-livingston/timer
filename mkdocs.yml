@@ -1,0 +1,41 @@
+site_name: timer
+site_description: A Python package for transit fitting analysis
+site_url: https://john-livingston.github.io/timer
+repo_url: https://github.com/john-livingston/timer
+repo_name: john-livingston/timer
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.sections
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Configuration:
+    - System parameters (sys.yaml): configuration/sys.md
+    - Fit parameters (fit.yaml): configuration/fit.md
+  - Usage: usage.md
