@@ -4,17 +4,6 @@ A Python package for transit fitting analysis.
 
 ## Installation
 
-### Option 1: Install from source (recommended)
-
-    git clone git@gitlab.com:john-livingston/timer.git
-    cd timer
-    conda create -n timer python=3.13
-    conda activate timer
-    pip install .
-    pip install git+https://github.com/john-livingston/limbdark
-
-### Option 2: Development installation
-
     git clone git@gitlab.com:john-livingston/timer.git
     cd timer
     conda create -n timer python=3.13
@@ -26,7 +15,8 @@ A Python package for transit fitting analysis.
 
 After installation, you can use the command-line interface:
 
-    timer-fit examples/hip67522
+    timer-fit examples/hip67522b
+    timer-fit examples/hip67522c
 
 The working directory must contain both `fit.yaml` and `sys.yaml` files. 
 
