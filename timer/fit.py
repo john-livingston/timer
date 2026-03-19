@@ -296,18 +296,18 @@ class TransitFit:
                 self.nflares = 1
 
             for p in 'tpeak fwhm ampl'.split():
-                param_val = self.flare[p]
-                if isinstance(param_val, (list, tuple)):
-                    if len(param_val) != self.nflares:
-                        raise ValueError(f"All flare parameters must have same length. "
-                                       f"tpeak has {self.nflares} values, {p} has {len(param_val)}")
-                    self.priors[f'flare_{p}'] = np.array(param_val)
-                else:
-                    # Single value - replicate for all flares
-                    self.priors[f'flare_{p}'] = np.array([param_val] * self.nflares)
+                for suffix in [p, f'{p}_unc']:
+                    param_val = self.flare[suffix]
+                    if isinstance(param_val, (list, tuple)):
+                        if len(param_val) != self.nflares:
+                            raise ValueError(f"All flare parameters must have same length. "
+                                           f"tpeak has {self.nflares} values, {suffix} has {len(param_val)}")
+                        self.priors[f'flare_{suffix}'] = np.array(param_val)
+                    else:
+                        # Single value - replicate for all flares
+                        self.priors[f'flare_{suffix}'] = np.array([param_val] * self.nflares)
 
                 self.priors[f'flare_{p}_prior'] = self.flare[f'{p}_prior']
-                self.priors[f'flare_{p}_unc'] = self.flare[f'{p}_unc']
 
             # Adjust tpeak for reference time
             p = 'tpeak'
@@ -320,18 +320,18 @@ class TransitFit:
                 self.nbumps = 1
 
             for p in 'tcenter width ampl'.split():
-                param_val = self.bump[p]
-                if isinstance(param_val, (list, tuple)):
-                    if len(param_val) != self.nbumps:
-                        raise ValueError(f"All bump parameters must have same length. "
-                                       f"tcenter has {self.nbumps} values, {p} has {len(param_val)}")
-                    self.priors[f'bump_{p}'] = np.array(param_val)
-                else:
-                    # Single value - replicate for all bumps
-                    self.priors[f'bump_{p}'] = np.array([param_val] * self.nbumps)
+                for suffix in [p, f'{p}_unc']:
+                    param_val = self.bump[suffix]
+                    if isinstance(param_val, (list, tuple)):
+                        if len(param_val) != self.nbumps:
+                            raise ValueError(f"All bump parameters must have same length. "
+                                           f"tcenter has {self.nbumps} values, {suffix} has {len(param_val)}")
+                        self.priors[f'bump_{suffix}'] = np.array(param_val)
+                    else:
+                        # Single value - replicate for all bumps
+                        self.priors[f'bump_{suffix}'] = np.array([param_val] * self.nbumps)
 
                 self.priors[f'bump_{p}_prior'] = self.bump[f'{p}_prior']
-                self.priors[f'bump_{p}_unc'] = self.bump[f'{p}_unc']
 
             # Adjust tcenter for reference time
             p = 'tcenter'

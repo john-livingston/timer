@@ -1,0 +1,28 @@
+data:
+  keplercam:
+    file: V1298Tau-e_20230924_KeplerCam_zp.txt
+    band: z
+    trend: 1
+#    spline: true
+    binsize: 0.00139 # 2 min
+    trim_end: 0.01
+planets: e
+tc_pred_iso: 2023-09-24 12:26
+tc_pred_unc: 0.08
+# uniform:
+#   ror: [0.01,0.15]
+#   b: [0,1]
+fixed:
+ - period
+ - u_star
+include_flare: true
+flare:
+  ampl: [40, 15] # ppt
+  ampl_unc: [80, 30] # ppt
+  ampl_prior: uniform
+  tpeak: [2460211.8493, 2460211.863]
+  tpeak_unc: [0.001, 0.005]
+  tpeak_prior: uniform
+  fwhm: [0.01, 0.03]
+  fwhm_unc: [0.02, 0.06]
+  fwhm_prior: uniform
