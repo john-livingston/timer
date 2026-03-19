@@ -120,15 +120,41 @@ flare:
   ampl_prior: uniform
 ```
 
-Multiple flares can be specified using lists:
+### Multiple flares
+
+Multiple flares can be specified by using lists for any subset of parameters. The number of flares is determined by the length of `tpeak`. Any parameter given as a scalar is broadcast to all flares; any given as a list must match the number of flares.
+
+Shared parameters (scalar `ampl`, `fwhm`, `tpeak_unc` broadcast to both flares):
 
 ```yaml
 flare:
-  tpeak: [2460925.05, 2460925.12]
-  fwhm: 0.02               # scalar values are replicated for all flares
-  ampl: 7.5
-  ...
+  tpeak: [2459134.77, 2459134.78]
+  tpeak_unc: 0.02            # shared
+  tpeak_prior: uniform
+  fwhm: 0.02                 # shared
+  fwhm_unc: 0.04             # shared
+  fwhm_prior: uniform
+  ampl: 5                    # shared
+  ampl_unc: 10               # shared
+  ampl_prior: uniform
 ```
+
+Fully independent per-flare parameters:
+
+```yaml
+flare:
+  tpeak: [2460211.8493, 2460211.863]
+  tpeak_unc: [0.001, 0.005]  # per-flare
+  tpeak_prior: uniform
+  fwhm: [0.01, 0.03]         # per-flare
+  fwhm_unc: [0.02, 0.06]     # per-flare
+  fwhm_prior: uniform
+  ampl: [40, 15]              # per-flare
+  ampl_unc: [80, 30]          # per-flare
+  ampl_prior: uniform
+```
+
+The parameters that support per-flare lists are: `tpeak`, `tpeak_unc`, `fwhm`, `fwhm_unc`, `ampl`, `ampl_unc`. The `*_prior` parameters (`tpeak_prior`, `fwhm_prior`, `ampl_prior`) are always scalar and shared across all flares.
 
 ## Bump model
 
@@ -147,7 +173,9 @@ bump:
   ampl_prior: uniform
 ```
 
-Multiple bumps work the same as multiple flares.
+### Multiple bumps
+
+Multiple bumps work the same as multiple flares -- use lists for any subset of `tcenter`, `tcenter_unc`, `width`, `width_unc`, `ampl`, `ampl_unc`. Scalars are broadcast; lists must match the number of bumps (determined by `tcenter` length).
 
 ## Sampler
 

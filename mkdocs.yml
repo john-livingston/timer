@@ -29,6 +29,7 @@ markdown_extensions:
   - pymdownx.superfences
   - admonition
   - pymdownx.details
+  - attr_list
   - toc:
       permalink: true
 
@@ -39,3 +40,4 @@ nav:
     - System parameters (sys.yaml): configuration/sys.md
     - Fit parameters (fit.yaml): configuration/fit.md
   - Usage: usage.md
+  - Examples: examples.md
