@@ -1,0 +1,51 @@
+data:
+  g:
+    file: V1298Tauc_241215_muscat3_g_c245678_r18_mapping.csv
+    band: g
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+  r:
+    file: V1298Tauc_241215_muscat3_r_c245678_r20_mapping.csv
+    band: r
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+  i:
+    file: V1298Tauc_241215_muscat3_i_c245678_r24_mapping.csv
+    band: i
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+  z:
+    file: V1298Tauc_241215_muscat3_z_c245678_r28_mapping.csv
+    band: z
+    trend: 1
+    # spline: true
+    binsize: 0.00139 # 2 min
+    format: afphot
+planets: c
+tc_pred_iso: 2024-12-16 8:57
+tc_pred_unc: 0.04
+# uniform:
+#   ror: [0.01,0.15]
+#   b: [0,1]
+fixed:
+ - period
+ - u_star
+chromatic: false
+include_bump: true
+chromatic_bump: true
+bump:
+  ampl_prior: uniform
+  ampl: 1.5 # ppt
+  ampl_unc: 3 # ppt (full-width of uniform prior)
+  tcenter_prior: uniform
+  tcenter: 2460660.81
+  tcenter_unc: 0.02 # days (full-width of uniform prior)
+  width_prior: uniform
+  width: 0.01
+  width_unc: 0.02 # days (full-width of uniform prior)
