@@ -2,7 +2,7 @@
 
 All examples can be run from the repository root with `timer-fit examples/<name>`.
 
-## HIP 67522 b -- chromatic transit
+## HIP 67522 b — chromatic transit
 
 Multi-band (griz) transit of HIP 67522 b with MuSCAT4. Demonstrates simultaneous fitting with `chromatic: true` to measure per-band radius ratios.
 
@@ -51,7 +51,7 @@ fixed:
 
 ![HIP 67522 b corner](assets/examples/hip67522b-corner.png)
 
-## HIP 67522 c -- spline detrending
+## HIP 67522 c — spline detrending
 
 Multi-band transit of HIP 67522 c with spline detrending (`spline: true`) instead of polynomial trends.
 
@@ -98,7 +98,7 @@ fixed:
 
 ![HIP 67522 c corner](assets/examples/hip67522c-corner.png)
 
-## V1298 Tau c -- spot crossing
+## V1298 Tau c — spot crossing
 
 Transit of V1298 Tau c with a spot-crossing event modeled as a Gaussian bump (`include_bump: true`). With `chromatic_bump: true`, the bump amplitude is fit independently per band.
 
@@ -152,7 +152,7 @@ bump:
 
 ![V1298 Tau spot fit](assets/examples/v1298tau-spot-fit.png)
 
-## V1298 Tau c -- flare (shared parameters)
+## V1298 Tau c — flare (shared parameters)
 
 Transit of V1298 Tau c with two overlapping flares modeled simultaneously. Scalar parameters (`ampl`, `fwhm`, etc.) are shared across both flares while `tpeak` is specified per-flare.
 
@@ -185,7 +185,7 @@ flare:
 
 ![V1298 Tau flare1 fit](assets/examples/v1298tau-flare1-fit.png){ width="33%" }
 
-## V1298 Tau e -- flare (per-flare parameters)
+## V1298 Tau e — flare (per-flare parameters)
 
 Transit of V1298 Tau e with two flares where all parameters are specified independently per flare. Any subset of `tpeak`, `tpeak_unc`, `fwhm`, `fwhm_unc`, `ampl`, `ampl_unc` can be a list (must match number of flares) or a scalar (broadcast to all flares).
 
