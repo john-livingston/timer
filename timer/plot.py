@@ -482,8 +482,10 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
         lin_mod = soln[f'{name}_lm'] if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
         flare_mod = soln[f'{name}_flare'] if include_flare else 0
         bump_mod = soln[f'{name}_bump'] if include_bump else 0
-        tra_mod = np.sum(soln[f"{name}_light_curves"], axis=-1)
-        tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=-1)
+        lcs = soln[f"{name}_light_curves"]
+        lcs_hr = soln[f"{name}_light_curves_hr"]
+        tra_mod = np.sum(lcs, axis=-1) if lcs.ndim > 1 else lcs
+        tra_mod_hr = np.sum(lcs_hr, axis=-1) if lcs_hr.ndim > 1 else lcs_hr
     else:
         if f'{name}_mean' in soln.keys():
             mean = np.median(trace.posterior[f"{name}_mean"].values)
@@ -498,10 +500,26 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
     sys_mod = lin_mod + flare_mod + bump_mod + mean
 
     if use_gp:
-        if trace is None or not median:
-            gp_mod = soln[f"{name}_gp_pred"]
+        if trace is not None and median:
+            # Compute GP prediction from median posterior params
+            from celerite2 import GaussianProcess as CeleriteGP, terms as celerite_terms
+            post = trace.posterior
+            if f'gp_log_amp_{name}' in post:
+                log_amp = float(np.median(post[f'gp_log_amp_{name}'].values))
+            else:
+                log_amp = float(np.median(post['gp_log_amp'].values))
+            if f'gp_log_scale_{name}' in post:
+                log_scale = float(np.median(post[f'gp_log_scale_{name}'].values))
+            else:
+                log_scale = float(np.median(post['gp_log_scale'].values))
+            kernel = celerite_terms.Matern32Term(sigma=10**log_amp, rho=10**log_scale)
+            residuals = y[mask] - (tra_mod + sys_mod)
+            diag = np.exp(2*lcjit) + yerr[mask]**2
+            gp = CeleriteGP(kernel)
+            gp.compute(x[mask], diag=diag)
+            gp_mod = gp.predict(residuals)
         else:
-            gp_mod = np.median(trace.posterior[f"{name}_gp_pred"].values, axis=0)
+            gp_mod = soln[f"{name}_gp_pred"]
         sys_mod += gp_mod
 
     if axes is None:
@@ -565,6 +583,7 @@ def systematics(fit, name, style=1):
     nspline = fit.fit_params['data'][name]['spline_knots'] if spline else 0
     bias = fit.fit_params['data'][name]['add_bias']
     nbias = 1 if bias else 0
+    use_gp = fit.use_gp
 
     x = fit.data[name]['x']
     X = fit.data[name]['X']
@@ -575,9 +594,12 @@ def systematics(fit, name, style=1):
     covariates = not X.shape[1] == nspline + ntrend + nbias
     ncovariates = X.shape[1] - ntrend - nspline - nbias
 
+    # GP prediction from MAP
+    gp_pred = fit.map_soln.get(f'{name}_gp_pred', None) if use_gp else None
+
     # Skip plotting if there's only bias term or would cause axes issues
-    ncols = sum([covariates, (trend is not None), spline])
-    if ncols <= 1:  # Only bias term or single component
+    ncols = sum([covariates, (trend is not None), spline, use_gp])
+    if ncols <= 1 and not use_gp:
         print(f"Skipping systematics plot for {name}: insufficient systematic components ({ncols})")
         return None
 
@@ -636,58 +658,50 @@ def systematics(fit, name, style=1):
     
     elif style == 2:
 
-        ncols = sum([covariates, (trend is not None), spline])
+        ncols = sum([covariates, (trend is not None), spline, use_gp])
         if ncols > 1:
             ncols += 1 # add col for sum
-        figsize = (3*ncols,3)
-        fig, axs = plt.subplots(1, ncols, figsize=figsize, sharex=True)
+        figsize = (3*ncols, 3)
+        fig, axs = plt.subplots(1, max(ncols, 1), figsize=figsize, sharex=True)
+        if ncols <= 1:
+            axs = [axs]
 
-        def plot(ax, x, X, w, name):
-            for i,y in enumerate(X.T):
-                ax.plot(x, y, label=f'w = {w[i].item() :.1f}')
-            plt.setp(ax, title=f'{name}')
+        def plot_basis(ax, x, X, w, label):
+            for i, y in enumerate(X.T):
+                ax.plot(x, y, label=f'w = {w[i].item():.1f}')
+            plt.setp(ax, title=f'{label}')
 
-        if covariates and not spline and not trend:
-            plot(axs, x_, X_cov, w_cov, 'covariates')
+        # Build panels in order
+        col = 0
+        if covariates:
+            plot_basis(axs[col], x_, X_cov, w_cov, 'covariates')
+            axs[col].plot(x_, np.dot(X_cov, w_cov), color='k', label='sum')
+            col += 1
+        if trend is not None:
+            plot_basis(axs[col], x_, X_tre, w_tre, 'trend')
+            col += 1
+        if spline:
+            plot_basis(axs[col], x_, X_spl, w_spl, 'spline')
+            axs[col].plot(x_, np.dot(X_spl, w_spl), color='k', label='sum')
+            col += 1
+        gp_col = None
+        if use_gp and gp_pred is not None:
+            gp_col = col
+            axs[col].plot(x_, gp_pred, color='C0')
+            plt.setp(axs[col], title='GP')
+            col += 1
 
-        elif spline and not covariates and not trend:
-            plot(axs, x_, X_spl, w_spl, 'spline')
-            axs[0].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
+        # Legends for non-GP panels
+        for i in range(col):
+            if i != gp_col:
+                axs[i].legend(fontsize=8)
 
-        elif trend and not covariates and not spline:
-            plot(axs, x_, X_tre, w_tre, 'trend')
-
-        elif covariates and spline and not trend:
-            plot(axs[0], x_, X_cov, w_cov, 'covariates')
-            plot(axs[1], x_, X_spl, w_spl, 'spline')
-            axs[0].plot(x_, np.dot(X_cov, w_cov), color='k', label=f'sum')
-            axs[1].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
-
-        elif covariates and trend and not spline:
-            plot(axs[0], x_, X_cov, w_cov, 'covariates')
-            plot(axs[1], x_, X_tre, w_tre, 'trend')
-            axs[0].plot(x_, np.dot(X_cov, w_cov), color='k', label=f'sum')
-
-        elif trend and spline and not covariates:
-            plot(axs[0], x_, X_tre, w_tre, 'trend')
-            plot(axs[1], x_, X_spl, w_spl, 'spline')
-            axs[1].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
-
-        elif covariates and trend and spline:
-            plot(axs[0], x_, X_cov, w_cov, 'covariates')
-            plot(axs[1], x_, X_tre, w_tre, 'trend')
-            plot(axs[2], x_, X_spl, w_spl, 'spline')
-            axs[0].plot(x_, np.dot(X_cov, w_cov), color='k', label=f'sum')
-            axs[2].plot(x_, np.dot(X_spl, w_spl), color='k', label=f'sum')
-
-        for ax in axs[:-1]:
-            ax.legend(fontsize=8)
-
-        # if ncols > 1:
-        #     axs[-1].plot(x_, np.dot(X,w), color='k')
-        #     plt.setp(axs[-1], title='sum')
+        # Sum panel
         if ncols > 1:
-            axs[-1].plot(x_, np.dot(X_, w), color='k')
+            sum_model = np.dot(X_, w)
+            if use_gp and gp_pred is not None:
+                sum_model = sum_model + gp_pred
+            axs[-1].plot(x_, sum_model, color='k')
             plt.setp(axs[-1], title='sum')
 
         plt.setp(axs, xlabel='time', ylabel='flux')

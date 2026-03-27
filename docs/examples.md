@@ -98,6 +98,33 @@ fixed:
 
 ![HIP 67522 c corner](assets/examples/hip67522c-corner.png)
 
+### GP alternative
+
+The same dataset can be fit using a Gaussian process (Matern-3/2) instead of splines for detrending. Replace `spline: true` with `trend: 1` for each dataset and add a `gp` section. Here `per_dataset: [log_amp]` fits a separate GP amplitude per band while sharing the length scale.
+
+```yaml
+# fit.yaml (changes from spline version)
+data:
+  g:
+    trend: 1    # linear trend instead of spline
+    # spline: true  (remove or set false)
+  # ... same for r, i, z
+use_gp: true
+gp:
+  log_amp: -1
+  log_amp_unc: 4
+  log_amp_prior: uniform
+  log_scale: -1
+  log_scale_unc: 4
+  log_scale_prior: uniform
+  per_dataset: [log_amp]
+n_restarts: 5
+```
+
+The transit timing measurement from the GP fit is within ~0.3-sigma of the spline fit.
+
+![HIP 67522 c GP fit](assets/examples/hip67522c-gp-fit.png)
+
 ## V1298 Tau c — spot crossing
 
 Transit of V1298 Tau c with a spot-crossing event modeled as a Gaussian bump (`include_bump: true`). With `chromatic_bump: true`, the bump amplitude is fit independently per band.

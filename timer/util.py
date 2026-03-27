@@ -53,11 +53,17 @@ def get_map_soln(trace):
     ix = trace.sample_stats["lp"] == max_lp
     trace_map = trace.posterior.where(ix, drop=True)
     flat_samps_map = trace_map.stack(sample=("chain", "draw"))
-    soln = {k: v.values.item() if v.values.size == 1 else v.values for k, v in flat_samps_map.data_vars.items()}
+    soln = {}
+    for k, v in flat_samps_map.data_vars.items():
+        val = v.values
+        if val.size == 1:
+            soln[k] = val.item()
+        else:
+            soln[k] = np.squeeze(val)
     return soln, max_lp.values.item()
 
 def get_var_names(data, bands, fit_basis, use_gp, fixed,
-                  chromatic=False, log_sigma=True, weights=False):
+                  chromatic=False, log_sigma=True, weights=False, gp_config=None):
 
     var_names = ['t0']
     for par in 'period b dur'.split():
@@ -71,9 +77,15 @@ def get_var_names(data, bands, fit_basis, use_gp, fixed,
             var_names += ['ror']
     if (fit_basis == 'mstar/rstar') and not any(['m_star' in fixed, 'r_star' in fixed]):
         var_names += ['m_star', 'r_star']
+    if use_gp:
+        per_ds = gp_config.get('per_dataset', []) if gp_config else []
+        for p in ['log_amp', 'log_scale']:
+            if p in per_ds:
+                for name in data.keys():
+                    var_names += [f'gp_{p}_{name}']
+            else:
+                var_names += [f'gp_{p}']
     for name in data.keys():
-        if use_gp:
-            var_names += [f'{name}_log_rho_gp', f'{name}_log_sigma_gp']
         if weights:
             var_names += [f'{name}_weights']
         if log_sigma:
@@ -81,10 +93,11 @@ def get_var_names(data, bands, fit_basis, use_gp, fixed,
     return var_names
 
 def get_summary(trace, data, bands, fit_basis, use_gp, fixed,
-                chromatic=False, log_sigma=True, weights=False):
+                chromatic=False, log_sigma=True, weights=False, gp_config=None):
 
     var_names = get_var_names(data, bands, fit_basis, use_gp, fixed,
-                              chromatic=chromatic, log_sigma=log_sigma, weights=weights)
+                              chromatic=chromatic, log_sigma=log_sigma, weights=weights,
+                              gp_config=gp_config)
     summary = az.summary(
         trace,
         var_names=var_names
@@ -92,9 +105,10 @@ def get_summary(trace, data, bands, fit_basis, use_gp, fixed,
     return summary
 
 def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, include_bump=False, fp=None):
+    lcs = map_soln[f"{name}_light_curves"]
     mod = (
         + map_soln[f"{name}_mean"]
-        + np.sum(map_soln[f"{name}_light_curves"], axis=-1)
+        + (np.sum(lcs, axis=-1) if lcs.ndim > 1 else lcs)
     )
     if f"{name}_lm" in map_soln.keys():
         mod += map_soln[f"{name}_lm"]
@@ -269,8 +283,10 @@ def get_corrected(data, name, soln, nplanets,
             mean = 0
         lcjit = np.exp(soln[f'{name}_log_sigma_lc'])
         lin_mod = soln[f'{name}_lm']
-        tra_mod = np.sum(soln[f"{name}_light_curves"], axis=1)
-        tra_mod_hr = np.sum(soln[f"{name}_light_curves_hr"], axis=1)
+        lcs = soln[f"{name}_light_curves"]
+        lcs_hr = soln[f"{name}_light_curves_hr"]
+        tra_mod = np.sum(lcs, axis=-1) if lcs.ndim > 1 else lcs
+        tra_mod_hr = np.sum(lcs_hr, axis=-1) if lcs_hr.ndim > 1 else lcs_hr
     else:
         if f'{name}_mean' in soln.keys():
             mean = np.median(trace[f"{name}_mean"])

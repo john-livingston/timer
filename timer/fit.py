@@ -161,6 +161,10 @@ class TransitFit:
             self.flare = self.fit_params['flare']
         if self.include_bump:
             self.bump = self.fit_params['bump']
+        if self.use_gp:
+            self.gp_config = self.fit_params.get('gp', {})
+        else:
+            self.gp_config = None
         # sampler settings
         self.tune = fit_params['tune']
         self.draws = fit_params['draws']
@@ -337,6 +341,14 @@ class TransitFit:
             p = 'tcenter'
             self.priors[f'bump_{p}'] = self.priors[f'bump_{p}'] - self.ref_time
 
+        if self.use_gp:
+            gp = self.gp_config
+            for p in ['log_amp', 'log_scale']:
+                key = f'gp_{p}'
+                self.priors[key] = gp[p]
+                self.priors[f'{key}_unc'] = gp[f'{p}_unc']
+                self.priors[f'{key}_prior'] = gp[f'{p}_prior']
+
     def build_model(self, start=None, force=False, verbose=False, plot=True):
         if force or self.clobber or self.model is None:
             logging.info('building and optimizing model')
@@ -348,7 +360,7 @@ class TransitFit:
             self.model, self.map_soln = model.build(
                 data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
                 masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, chromatic_flare=chromatic_flare, include_bump=include_bump, chromatic_bump=chromatic_bump,
-                verbose=verbose, use_custom_optimizer=use_custom_optimizer
+                verbose=verbose, use_custom_optimizer=use_custom_optimizer, gp_config=self.gp_config
             )
             logging.info(f"Model: {self.model}")
             pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
@@ -470,7 +482,7 @@ class TransitFit:
         with self.model:
             self.summary = util.get_summary(
                 self.trace, self.data, self.bands, self.fit_basis, self.use_gp, self.fixed,
-                chromatic=self.chromatic
+                chromatic=self.chromatic, gp_config=self.gp_config
             )
             logging.info(f'r_hat max: {self.summary["r_hat"].max()}')
             
@@ -479,6 +491,9 @@ class TransitFit:
         soln, logp = util.get_map_soln(self.trace)
         logging.info(f"Max. log probability after sampling: {logp:.2f}")
         self.map_soln = soln
+        if self.use_gp:
+            from .model import _add_gp_predictions
+            self.map_soln = _add_gp_predictions(self.map_soln, self.data, self.masks, self.gp_config)
         pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
             
         if plot_fit:
@@ -549,7 +564,8 @@ class TransitFit:
         
         print('generating trace plot')
         var_names = util.get_var_names(
-            self.data, self.bands, self.fit_basis, self.use_gp, self.fixed, self.chromatic
+            self.data, self.bands, self.fit_basis, self.use_gp, self.fixed, self.chromatic,
+            gp_config=self.gp_config
         )
         with self.model:
             az.plot_trace(self.trace, var_names=var_names)

@@ -143,10 +143,13 @@ def sample(
     cores= 2
 ):
     with model:
+        # Filter initvals to only include model variables
+        model_var_names = {var.name for var in model.value_vars}
+        initvals = {k: v for k, v in map_soln.items() if k in model_var_names}
         trace = pm.sample(
             tune=tune,
             draws=draws,
-            initvals=map_soln,
+            initvals=initvals,
             cores=cores,
             chains=chains,
             target_accept=0.95,
@@ -173,7 +176,8 @@ def build(
     verbose=False,
     logp_threshold=1,
     sequential_opt=False,
-    use_custom_optimizer=True
+    use_custom_optimizer=True,
+    gp_config=None
 ):
     logging.info("Building model with optimizer: %s", 'custom' if use_custom_optimizer else 'pymc')
 
@@ -351,6 +355,14 @@ def build(
         else:
             raise ValueError(f'basis={basis} not supported')
             
+        # GP shared parameters (sampled once, used by all datasets)
+        gp_shared = {}
+        if use_gp:
+            per_ds = gp_config.get('per_dataset', []) if gp_config else []
+            for p in ['log_amp', 'log_scale']:
+                if p not in per_ds:
+                    gp_shared[p] = get_rv(key=f'gp_{p}', priors=priors, verbose=verbose)
+
         # loop over the datasets
         parameters = dict()
         for n,(name,data) in enumerate(datasets.items()):
@@ -399,22 +411,20 @@ def build(
             priors[f'{name}_log_sigma_lc_unc'] = upper-lower
             priors[f'{name}_log_sigma_lc_prior'] = 'uniform'
             parameters[f'{name}_noise'] = log_sigma_lc
+            # GP kernel for this dataset
             if use_gp:
-                log_rho_gp = get_rv(
-                    name=f'{name}_log_rho_gp', 
-                    dist='gaussian', 
-                    mu=0, 
-                    sd=10, 
-                    verbose=verbose
-                )
-                log_sigma_gp = get_rv(
-                    name=f'{name}_log_sigma_gp', 
-                    dist='gaussian', 
-                    mu=np.log(np.std(y[mask])), 
-                    sd=10, 
-                    verbose=verbose
-                )
-                parameters[f'{name}_gp'] = [log_rho_gp, log_sigma_gp]
+                from celerite2.pymc import GaussianProcess as CeleriteGP, terms as celerite_terms
+                per_ds = gp_config.get('per_dataset', []) if gp_config else []
+                gp_log_amp = gp_shared.get('log_amp', None)
+                if gp_log_amp is None:
+                    gp_log_amp = get_rv(key='gp_log_amp', name=f'gp_log_amp_{name}',
+                                        priors=priors, verbose=verbose)
+                gp_log_scale = gp_shared.get('log_scale', None)
+                if gp_log_scale is None:
+                    gp_log_scale = get_rv(key='gp_log_scale', name=f'gp_log_scale_{name}',
+                                          priors=priors, verbose=verbose)
+                gp_kernel = celerite_terms.Matern32Term(
+                    sigma=10**gp_log_amp, rho=10**gp_log_scale)
 
             if include_flare:
                 # Get band-specific amplitude if chromatic flare is enabled
@@ -485,14 +495,17 @@ def build(
             )
             pm.Deterministic(f"{name}_light_curves_hr", light_curves_hr)
 
-            # GP likelihood
+            # Likelihood
             if use_gp:
-                raise NotImplementedError("GP support is temporarily disabled")
+                diag = pt.exp(2*log_sigma_lc) + yerr[mask]**2
+                gp_obj = CeleriteGP(gp_kernel)
+                gp_obj.compute(x[mask], diag=diag)
+                pm.Potential(f"{name}_y_observed", gp_obj.log_likelihood(y[mask] - light_curve))
             else:
                 y_observed = pm.Normal(
-                    f"{name}_y_observed", 
+                    f"{name}_y_observed",
                     mu=light_curve,
-                    sigma=np.sqrt(pt.exp(2*log_sigma_lc) + yerr[mask]**2), 
+                    sigma=np.sqrt(pt.exp(2*log_sigma_lc) + yerr[mask]**2),
                     observed=y[mask]
                 )
 
@@ -594,4 +607,57 @@ def build(
             # final optimization of all parameters
             map_soln = pm.find_MAP(start=map_soln)
 
+    # Compute GP predictions from MAP solution
+    if use_gp:
+        map_soln = _add_gp_predictions(map_soln, datasets, masks, gp_config)
+
     return model, map_soln
+
+
+def _add_gp_predictions(map_soln, datasets, masks, gp_config):
+    """Compute GP conditional mean from MAP params and add to map_soln."""
+    from celerite2 import GaussianProcess as CeleriteGP, terms as celerite_terms
+    per_ds = gp_config.get('per_dataset', []) if gp_config else []
+    for name, data in datasets.items():
+        x, y, yerr = data['x'], data['y'], data['yerr']
+        mask = masks[name]
+        if mask is None:
+            mask = np.ones(len(x), dtype=bool)
+
+        # Reconstruct kernel from MAP params
+        if 'log_amp' in per_ds:
+            log_amp = float(np.squeeze(map_soln[f'gp_log_amp_{name}']))
+        else:
+            log_amp = float(np.squeeze(map_soln['gp_log_amp']))
+        if 'log_scale' in per_ds:
+            log_scale = float(np.squeeze(map_soln[f'gp_log_scale_{name}']))
+        else:
+            log_scale = float(np.squeeze(map_soln['gp_log_scale']))
+
+        amp = 10**log_amp
+        scale = 10**log_scale
+        kernel = celerite_terms.Matern32Term(sigma=amp, rho=scale)
+
+        # Residuals = data - deterministic model
+        light_curve = float(np.squeeze(map_soln[f'{name}_mean']))
+        lcs = np.squeeze(map_soln[f'{name}_light_curves'])
+        if lcs.ndim > 1:
+            light_curve = light_curve + np.sum(lcs, axis=-1)
+        else:
+            light_curve = light_curve + lcs
+        if f'{name}_lm' in map_soln:
+            light_curve = light_curve + np.squeeze(map_soln[f'{name}_lm'])
+        if f'{name}_flare' in map_soln:
+            light_curve = light_curve + np.squeeze(map_soln[f'{name}_flare'])
+        if f'{name}_bump' in map_soln:
+            light_curve = light_curve + np.squeeze(map_soln[f'{name}_bump'])
+
+        residuals = y[mask] - light_curve
+        log_sigma_lc = float(np.squeeze(map_soln[f'{name}_log_sigma_lc']))
+        diag = np.exp(2*log_sigma_lc) + yerr[mask]**2
+
+        gp = CeleriteGP(kernel)
+        gp.compute(x[mask], diag=diag)
+        map_soln[f'{name}_gp_pred'] = gp.predict(residuals)
+
+    return map_soln

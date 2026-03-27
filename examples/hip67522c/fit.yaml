@@ -37,3 +37,14 @@ uniform:
 fixed:
  - period
  - u_star
+# GP alternative: set spline: false and trend: 1 for each dataset, then:
+# use_gp: true
+# gp:
+#   log_amp: -1
+#   log_amp_unc: 4
+#   log_amp_prior: uniform
+#   log_scale: -1
+#   log_scale_unc: 4
+#   log_scale_prior: uniform
+#   per_dataset: [log_amp]
+# n_restarts: 5
