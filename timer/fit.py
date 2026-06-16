@@ -685,11 +685,12 @@ class TransitFit:
         flat_samps = self.trace.posterior.stack(sample=("chain", "draw"))
         t0_s = flat_samps['t0'].values
         with open(os.path.join(self.outdir, 'tc.txt'), 'w') as f:
+            # transit times reported in the data's native time system (t0 + ref_time)
             if self.nplanets > 1:
                 for i in range(self.nplanets):
-                    f.write(f'{self.planets[i]} {t0_s[i,:].mean() + self.ref_time - 2454833} {t0_s[i,:].std()}\n')
+                    f.write(f'{self.planets[i]} {t0_s[i,:].mean() + self.ref_time} {t0_s[i,:].std()}\n')
             else:
-                f.write(f'{self.planets[0]} {t0_s.mean() + self.ref_time - 2454833} {t0_s.std()}\n')
+                f.write(f'{self.planets[0]} {t0_s.mean() + self.ref_time} {t0_s.std()}\n')
         with open(os.path.join(self.outdir, 'ic.txt'), 'w') as f:
             soln, max_logp = util.get_map_soln(self.trace)
             nparams = sum([rv.size.eval() for rv in self.model.free_RVs])
