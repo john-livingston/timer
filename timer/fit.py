@@ -378,9 +378,12 @@ class TransitFit:
             x_all = np.concatenate([data['x'] for data in self.data.values()])
             x_mid = np.mean(x_all)
             period = np.atleast_1d(self.priors.get('period', []))
-            t0 = np.atleast_1d(self.priors.get('t0', []))
-            dur = np.atleast_1d(self.priors.get('dur', []))
-            for i in range(len(period)):
+            nplanets = len(period)
+            if nplanets == 0:
+                return
+            t0 = np.broadcast_to(np.atleast_1d(self.priors.get('t0', 0)), (nplanets,)).copy()
+            dur = np.broadcast_to(np.atleast_1d(self.priors.get('dur', 0)), (nplanets,)).copy()
+            for i in range(nplanets):
                 n = np.round((x_mid - t0[i]) / period[i])
                 mid = t0[i] + n * period[i]
                 if self.plot_midtransit:
