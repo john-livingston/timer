@@ -171,6 +171,8 @@ class TransitFit:
         self.chains = fit_params['chains']
         self.cores = fit_params['cores']
         self.clobber = fit_params['clobber']
+        self.plot_midtransit = fit_params.get('plot_midtransit', False)
+        self.plot_ingress_egress = fit_params.get('plot_ingress_egress', False)
         # initialize
         self.model = None
         self.map_soln = None
@@ -371,6 +373,22 @@ class TransitFit:
             plt.errorbar(x, y, yerr, ls='', label=data.get('band', name))
             plt.xlabel(f"time [BJD$-${ref_time}]")
             plt.ylabel("relative flux [ppt]")
+
+        if self.plot_midtransit or self.plot_ingress_egress:
+            x_all = np.concatenate([data['x'] for data in self.data.values()])
+            x_mid = np.mean(x_all)
+            period = np.atleast_1d(self.priors.get('period', []))
+            t0 = np.atleast_1d(self.priors.get('t0', []))
+            dur = np.atleast_1d(self.priors.get('dur', []))
+            for i in range(len(period)):
+                n = np.round((x_mid - t0[i]) / period[i])
+                mid = t0[i] + n * period[i]
+                if self.plot_midtransit:
+                    plt.axvline(mid, color='k', ls='-', alpha=0.7, label=f'midtransit {self.planets[i]}' if len(period) > 1 else 'midtransit')
+                if self.plot_ingress_egress:
+                    plt.axvline(mid - dur[i]/2, color='k', ls='--', alpha=0.7, label=f'ingress {self.planets[i]}' if len(period) > 1 else 'ingress')
+                    plt.axvline(mid + dur[i]/2, color='k', ls='--', alpha=0.7, label=f'egress {self.planets[i]}' if len(period) > 1 else 'egress')
+
         fn = f'data.png'
         plt.tight_layout()
         plt.legend()
