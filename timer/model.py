@@ -100,7 +100,7 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
             initval = mu
         if bounds is not None:
             lower_bound, upper_bound = bounds
-            rv = BoundedNormal(name, mu=mu, sd=sd, shape=shape, lower=lower_bound, upper=upper_bound)
+            rv = BoundedNormal(name, mu=mu, sd=sd, shape=shape, lower=lower_bound, upper=upper_bound, initval=initval)
         else:
             rv = pm.Normal(name, mu=mu, sigma=sd, shape=shape, initval=initval)
         spec = f'{dist}({mu},{sd})'
@@ -132,8 +132,8 @@ def get_rv(key=None, priors=None, dist=None, shape=None, name=None, bounded=None
         print(f'{name} ~ {spec}')
     return rv
 
-def BoundedNormal(name, mu, sd, shape, lower=0, upper=1):
-    return pm.TruncatedNormal(name, mu=mu, sigma=sd, lower=lower, upper=upper, shape=shape)
+def BoundedNormal(name, mu, sd, shape, lower=0, upper=1, initval=None):
+    return pm.TruncatedNormal(name, mu=mu, sigma=sd, lower=lower, upper=upper, shape=shape, initval=initval)
 
 def sample(
     model,

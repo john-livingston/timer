@@ -381,8 +381,9 @@ class TransitFit:
             nplanets = len(period)
             if nplanets == 0:
                 return
-            t0 = np.broadcast_to(np.atleast_1d(self.priors.get('t0', 0)), (nplanets,)).copy()
             dur = np.broadcast_to(np.atleast_1d(self.priors.get('dur', 0)), (nplanets,)).copy()
+            planets = [self.sys_params['planets'][k] for k in self.planets]
+            t0 = np.array([p['t0'][0] - self.ref_time for p in planets])
             for i in range(nplanets):
                 n = np.round((x_mid - t0[i]) / period[i])
                 mid = t0[i] + n * period[i]
