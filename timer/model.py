@@ -147,6 +147,16 @@ def sample(
         # Filter initvals to only include model variables
         model_var_names = {var.name for var in model.value_vars}
         initvals = {k: v for k, v in map_soln.items() if k in model_var_names}
+        # Ensure initvals match expected shapes (PyMC <5.19 issue: scalar
+        # initval for a shape=(1,) variable causes _init_jitter to fail)
+        for var in model.value_vars:
+            if var.name in initvals:
+                val = initvals[var.name]
+                if isinstance(getattr(var.type, "shape", None), tuple):
+                    expected = tuple(d for d in var.type.shape if d is not None)
+                    actual = np.shape(val)
+                    if actual != expected and len(expected) > 0 and len(actual) == 0:
+                        initvals[var.name] = np.full(expected, val)
         trace = pm.sample(
             tune=tune,
             draws=draws,
@@ -230,7 +240,7 @@ def build(
             if p in fixed:
                 v[p] = priors[p]
             else:
-                v[p] = get_rv(key=p, priors=priors, shape=nplanets, verbose=verbose)
+                v[p] = get_rv(key=p, priors=priors, shape=nplanets, verbose=verbose, bounds=[0, 1])
         elif basis == 'density':
             raise NotImplementedError
 
