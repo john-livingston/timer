@@ -66,6 +66,15 @@ def read_generic(
     else:
         raise ValueError("file type not recognized, must be .txt or .csv")
 
+    # DROP ALL-NaN COLUMNS: an entirely empty auxiliary column (e.g. Airmass when
+    # the header keyword is absent) carries no information, breaks design-matrix
+    # standardization, and — via bin_df's dropna — would silently delete every row.
+    all_nan_cols = [c for c in df.columns if df[c].isna().all()]
+    if all_nan_cols:
+        if verbose:
+            print(f'dropping all-NaN column(s): {all_nan_cols}')
+        df = df.drop(columns=all_nan_cols)
+
     if verbose:
         print(f'\nreading: {os.path.basename(fp)}')
         print(f'cadence: {np.median(np.diff(df[timecol].values))*86400 :.1f} seconds')
