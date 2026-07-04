@@ -466,7 +466,7 @@ def plot_chromatic_ror(trace, bands, nplanets=1, planets=None, figsize=(6,4)):
 def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False, 
     include_flare=False, include_bump=False,
     axes=None, figsize=(3,4), pl_letters='bcdefg', inferencedata=False, median=True, annotate_dict={},
-    annotate_sigma=True):
+    annotate_sigma=True, secondary_eclipse=False):
 
     x, y, yerr, x_hr = [data.get(i) for i in 'x y yerr x_hr'.split()]
     if mask is None:
@@ -534,7 +534,8 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
     ax.errorbar(x[mask], y[mask], yerr[mask], **data_kwargs)
     ax.errorbar(x[mask], y[mask], np.sqrt(yerr**2 + lcjit**2)[mask], alpha=0.5, **data_kwargs)
     ax.plot(x[mask], sys_mod, color=colors[1], label="systematics")
-    ax.plot(x[mask], tra_mod+sys_mod, color=colors[2], label="systematics+transit")
+    tra_label = "systematics+eclipse" if secondary_eclipse else "systematics+transit"
+    ax.plot(x[mask], tra_mod+sys_mod, color=colors[2], label=tra_label)
 #    ax.legend(fontsize=10)
     ax.set_ylabel("relative flux\n[ppt]")
     label = annotate_dict[name] if name in annotate_dict else name
@@ -549,13 +550,13 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
             pred = np.percentile(flat_samps[f"{name}_lc_pred_hr"], [16, 50, 84], axis=-1)
         else:
             pred = np.percentile(trace.posterior[f"{name}_light_curves_hr"].values, [16, 50, 84], axis=(0, 1))
-        ax.plot(x_hr, pred[1].sum(axis=-1), color=colors[0], label='transit')
+        ax.plot(x_hr, pred[1].sum(axis=-1), color=colors[0], label='eclipse' if secondary_eclipse else 'transit')
         art = ax.fill_between(
             x_hr, pred[0].sum(axis=-1), pred[2].sum(axis=-1), color=colors[0], alpha=0.5, zorder=1
         )
         art.set_edgecolor("none")
     else:
-        ax.plot(x_hr, tra_mod_hr, color=colors[0], label='transit')
+        ax.plot(x_hr, tra_mod_hr, color=colors[0], label='eclipse' if secondary_eclipse else 'transit')
     ax.set_ylabel("de-trended\n[ppt]")
 #    ax.legend(fontsize=10)
 

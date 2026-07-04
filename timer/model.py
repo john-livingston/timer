@@ -188,7 +188,8 @@ def build(
     logp_threshold=1,
     sequential_opt=False,
     use_custom_optimizer=True,
-    gp_config=None
+    gp_config=None,
+    secondary_eclipse=False
 ):
     logging.info("Building model with optimizer: %s", 'custom' if use_custom_optimizer else 'pymc')
 
@@ -356,10 +357,13 @@ def build(
                 ror = pt.mean([v[f'ror_{band}'] for band in bands])
             else:
                 ror = v['ror']
+            t0_orbit = v['t0']
+            if secondary_eclipse:
+                t0_orbit = v['t0'] + 0.5 * v['period']
             orbit = xo.orbits.KeplerianOrbit(
                 duration=v['dur'],
                 period=v['period'],
-                t0=v['t0'],
+                t0=t0_orbit,
                 b=v['b'],
                 ror=ror
             )

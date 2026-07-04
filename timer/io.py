@@ -81,7 +81,8 @@ def read_generic(
     if binsize is not None:
         df = bin_df(df, timecol, errcol, binsize=binsize)
     x, y, yerr = df[[timecol, fluxcol, errcol]].values.T
-    aux_cols = [c for c in df.columns if c not in [timecol, fluxcol, errcol]]
+    exclude_cols = {timecol, fluxcol, errcol, 'GJD_UTC', 'gjd_utc', 'time'}
+    aux_cols = [c for c in df.columns if c not in exclude_cols]
     X = df[aux_cols].values if len(aux_cols) > 0 else None
     # how many columns each block below contributes, so consumers can slice
     # the design matrix by block instead of re-deriving the sizes from the
