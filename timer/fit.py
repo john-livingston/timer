@@ -365,7 +365,10 @@ class TransitFit:
         for name,data in self.data.items():
             x, y, yerr = [data.get(i) for i in 'x y yerr'.split()]
             ref_time = data['ref_time']
-            plt.errorbar(x, y, yerr, ls='', label=name)
+            # Label by band (e.g. g/r/i/z) rather than the raw dataset key,
+            # which can carry the source filename (e.g. 'gp_241031.csv') and
+            # makes for an ugly, uninformative legend.
+            plt.errorbar(x, y, yerr, ls='', label=data.get('band', name))
             plt.xlabel(f"time [BJD$-${ref_time}]")
             plt.ylabel("relative flux [ppt]")
         fn = f'data.png'
@@ -1055,6 +1058,14 @@ The working directory must contain both 'fit.yaml' and 'sys.yaml' files.
     try:
         logging.info("Initializing TransitFit")
         fit = TransitFit(sys_params, fit_params, wd=wd, outdir=outdir)
+        if test_run:
+            logging.info("Test run requested: overriding sampler settings (tune=20, draws=20, chains=1, cores=2)")
+            fit.tune = 20
+            fit.draws = 20
+            fit.chains = 1
+            fit.cores = 2
+            fit.test_run = True
+            logging.info("Test run: skipping trace.pkl, plots, posterior samples, and corrected light curves")
     except Exception as e:
         error_msg = f"Error initializing TransitFit: {e}"
         logging.error(error_msg, exc_info=True)
