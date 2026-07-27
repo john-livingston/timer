@@ -614,32 +614,94 @@ def build(
     return model, map_soln
 
 
+def _build_gp(map_soln, name, x, yerr, gp_config):
+    """A computed celerite2 GP and its noise diagonal, from MAP hyperparameters.
+
+    Uses the numpy celerite2 backend: both callers run post-hoc, outside the
+    PyMC model context. x and yerr must already be masked.
+
+    Shared so that the kernel, the log10 amplitude/scale convention, and the
+    jitter diagonal cannot drift apart between the GP prediction and the
+    effective degrees of freedom.
+    """
+    from celerite2 import GaussianProcess as CeleriteGP, terms as celerite_terms
+
+    per_ds = gp_config.get('per_dataset', []) if gp_config else []
+    if 'log_amp' in per_ds:
+        log_amp = map_soln[f'gp_log_amp_{name}']
+    else:
+        log_amp = map_soln['gp_log_amp']
+    if 'log_scale' in per_ds:
+        log_scale = map_soln[f'gp_log_scale_{name}']
+    else:
+        log_scale = map_soln['gp_log_scale']
+
+    amp = float(10**np.squeeze(log_amp))
+    scale = float(10**np.squeeze(log_scale))
+    log_sigma_lc = float(np.squeeze(map_soln[f'{name}_log_sigma_lc']))
+    diag = np.exp(2*log_sigma_lc) + yerr**2
+
+    gp = CeleriteGP(celerite_terms.Matern32Term(sigma=amp, rho=scale))
+    gp.compute(x, diag=diag)
+    return gp, diag
+
+
+def compute_gp_edf(map_soln, datasets, masks, gp_config, max_points=5000):
+    """Effective degrees of freedom the GP absorbs, per dataset.
+
+    A GP posterior mean is the linear smoother y_hat = K (K+S)^-1 y, and its
+    effective degrees of freedom is the trace of that smoother. Counting the
+    GP as its handful of hyperparameters understates it badly: on a real fit
+    a GP charged for 5 hyperparameters absorbed about 110 degrees of freedom
+    out of 560 points, which reverses the model comparison.
+
+    Computed as n - tr(S (K+S)^-1), which needs only the diagonal of the
+    inverse: n solves, each O(n), so O(n^2) overall.
+
+    Returns {dataset_name: edf}, or None if any dataset exceeds max_points,
+    since the cost is prohibitive at survey scale. Returning None rather than
+    a partial sum keeps the caller from reporting a number that omits a
+    dataset.
+    """
+    for name, data in datasets.items():
+        mask = masks[name]
+        n = len(data['x']) if mask is None else int(np.sum(mask))
+        if n > max_points:
+            logging.warning(
+                f'skipping GP effective degrees of freedom: dataset {name} has '
+                f'{n} points, above max_points={max_points}; the calculation is '
+                'quadratic in the number of points'
+            )
+            return None
+
+    edf = {}
+    for name, data in datasets.items():
+        x, yerr = data['x'], data['yerr']
+        mask = masks[name]
+        if mask is None:
+            mask = np.ones(len(x), dtype=bool)
+        gp, diag = _build_gp(map_soln, name, x[mask], yerr[mask], gp_config)
+        n = int(np.sum(mask))
+        basis = np.eye(n)
+        inv_diag = np.array([gp.apply_inverse(basis[:, i])[i] for i in range(n)])
+        edf[name] = float(n - np.sum(diag * inv_diag))
+    return edf
+
+
 def _add_gp_predictions(map_soln, datasets, masks, gp_config):
     """Compute GP conditional mean from MAP params and add to map_soln."""
-    from celerite2 import GaussianProcess as CeleriteGP, terms as celerite_terms
-    per_ds = gp_config.get('per_dataset', []) if gp_config else []
     for name, data in datasets.items():
         x, y, yerr = data['x'], data['y'], data['yerr']
         mask = masks[name]
         if mask is None:
             mask = np.ones(len(x), dtype=bool)
 
-        # Reconstruct kernel from MAP params
-        if 'log_amp' in per_ds:
-            log_amp = float(np.squeeze(map_soln[f'gp_log_amp_{name}']))
+        # Residuals = data - deterministic model.
+        # the mean is only a model site when include_mean=True
+        if f'{name}_mean' in map_soln:
+            light_curve = float(np.squeeze(map_soln[f'{name}_mean']))
         else:
-            log_amp = float(np.squeeze(map_soln['gp_log_amp']))
-        if 'log_scale' in per_ds:
-            log_scale = float(np.squeeze(map_soln[f'gp_log_scale_{name}']))
-        else:
-            log_scale = float(np.squeeze(map_soln['gp_log_scale']))
-
-        amp = 10**log_amp
-        scale = 10**log_scale
-        kernel = celerite_terms.Matern32Term(sigma=amp, rho=scale)
-
-        # Residuals = data - deterministic model
-        light_curve = float(np.squeeze(map_soln[f'{name}_mean']))
+            light_curve = 0.0
         lcs = np.squeeze(map_soln[f'{name}_light_curves'])
         if lcs.ndim > 1:
             light_curve = light_curve + np.sum(lcs, axis=-1)
@@ -653,11 +715,8 @@ def _add_gp_predictions(map_soln, datasets, masks, gp_config):
             light_curve = light_curve + np.squeeze(map_soln[f'{name}_bump'])
 
         residuals = y[mask] - light_curve
-        log_sigma_lc = float(np.squeeze(map_soln[f'{name}_log_sigma_lc']))
-        diag = np.exp(2*log_sigma_lc) + yerr[mask]**2
 
-        gp = CeleriteGP(kernel)
-        gp.compute(x[mask], diag=diag)
+        gp, _ = _build_gp(map_soln, name, x[mask], yerr[mask], gp_config)
         map_soln[f'{name}_gp_pred'] = gp.predict(residuals)
 
     return map_soln

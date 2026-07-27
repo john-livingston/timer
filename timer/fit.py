@@ -466,6 +466,14 @@ class TransitFit:
         """Free parameters in the model, excluding deterministics and observed."""
         return util.count_free_params(self.model)
 
+    def _count_gp_hyperparams(self):
+        """GP hyperparameters among the free parameters.
+
+        Counted off the model for the same reason as _count_params, so the
+        edf correction subtracts exactly what _count_params added.
+        """
+        return util.count_free_params(self.model, prefix='gp_log_')
+
     def _count_data(self):
         """Points that entered the likelihood, excluding clipped outliers."""
         total = 0
@@ -797,8 +805,33 @@ class TransitFit:
             for ic in ics:
                 val = util.compute_ic(soln, max_logp, nparams, ndata, method=ic, verbose=False)
                 f.write(f'{ic} {val:.2f}\n')
-        if self.clobber:
-            pass
+
+            # a GP is charged for its hyperparameters but absorbs far more
+            # degrees of freedom, so report a corrected count alongside. This
+            # does real GP linear algebra and reads GP hyperparameters back
+            # out of map_soln, so it can fail (e.g. a force-loaded map.pkl
+            # whose gp.per_dataset no longer matches the current config); a
+            # failure here must not cost the uncorrected rows above or the
+            # posterior samples / corrected light curves saved below.
+            if self.use_gp:
+                try:
+                    edf_by_dataset = model.compute_gp_edf(
+                        self.map_soln, self.data, self.masks, self.gp_config)
+                    if edf_by_dataset is not None:
+                        edf = sum(edf_by_dataset.values())
+                        nparams_edf = nparams - self._count_gp_hyperparams() + edf
+                        f.write(f'edf {edf:.2f}\n')
+                        f.write(f'nparams {nparams}\n')
+                        f.write(f'nparams_edf {nparams_edf:.2f}\n')
+                        for ic in ics:
+                            val = util.compute_ic(soln, max_logp, nparams_edf, ndata,
+                                                  method=ic, verbose=False)
+                            f.write(f'{ic}_edf {val:.2f}\n')
+                except Exception as e:
+                    logging.warning(
+                        f'failed to compute GP effective degrees of freedom '
+                        f'({type(e).__name__}: {e}); skipping corrected IC rows'
+                    )
         self.save_posterior_samples()
         self.save_corrected()
 
