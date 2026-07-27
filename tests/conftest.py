@@ -57,11 +57,6 @@ def make_project(root, n=60, use_gp=False):
     return fit_params, sys_params
 
 
-@pytest.fixture
-def make_project_fn():
-    return make_project
-
-
 @pytest.fixture(scope='module')
 def make_project_module():
     return make_project
@@ -139,51 +134,3 @@ def gapped_lc(tmp_path):
         'fluxerr': np.full(len(t), 1e-3),
     }).to_csv(fp, index=False)
     return str(fp)
-
-
-@pytest.fixture
-def map_soln():
-    """A minimal MAP solution dict: one dataset named 'g', 100 points, 1 planet.
-
-    Shapes match what util.get_map_soln produces from a PyMC trace: scalar
-    sites come back as 0-d arrays and vector sites keep their length.
-    """
-    n = 100
-    return {
-        't0': np.array(0.05),
-        'period': np.array([3.0]),
-        'ror': np.array([0.05]),
-        'b': np.array([0.3]),
-        'dur': np.array([0.1]),
-        'u_star_g': np.array([0.4, 0.2]),
-        'g_mean': np.array(0.1),
-        'g_log_sigma_lc': np.array(-1.0),
-        'g_lm': np.full(n, 0.2),
-        'g_light_curves': np.full(n, -1.0),
-        'g_light_curves_hr': np.full(500, -1.0),
-    }
-
-
-@pytest.fixture
-def map_soln_multiplanet():
-    """The same dataset fitted with two planets, so the light curves stay 2-D.
-
-    This is the shape that reaches the `lcs.ndim > 1` branches in
-    util.get_residuals, util.get_outlier_mask and model._add_gp_predictions.
-    The two planets have different depths, so summing over the planet axis is
-    distinguishable from picking either column.
-    """
-    n = 100
-    return {
-        't0': np.array([0.05, 0.06]),
-        'period': np.array([3.0, 7.0]),
-        'ror': np.array([0.05, 0.03]),
-        'b': np.array([0.3, 0.1]),
-        'dur': np.array([0.1, 0.15]),
-        'u_star_g': np.array([0.4, 0.2]),
-        'g_mean': np.array(0.1),
-        'g_log_sigma_lc': np.array(-1.0),
-        'g_lm': np.full(n, 0.2),
-        'g_light_curves': np.column_stack([np.full(n, -1.0), np.full(n, -0.25)]),
-        'g_light_curves_hr': np.column_stack([np.full(500, -1.0), np.full(500, -0.25)]),
-    }
