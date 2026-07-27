@@ -6,12 +6,16 @@ import pytest
 import yaml
 
 
-def make_project(root, n=60):
+def make_project(root, n=60, use_gp=False):
     """Write a minimal but complete timer project into `root`.
 
     One dataset in a single band, a linear trend, a boxy transit and white
     noise. Small enough that a full build plus a short sample runs in seconds,
     and real enough that every stage of the pipeline actually executes.
+
+    With use_gp the light curve also carries a smooth wobble several times the
+    white noise, so there is something for the GP to absorb and the GP branch
+    of every downstream consumer is genuinely exercised.
     """
     os.makedirs(root, exist_ok=True)
     rng = np.random.default_rng(11)
@@ -19,6 +23,8 @@ def make_project(root, n=60):
     depth = np.where(np.abs(t - 2460423.06) < 0.02, -0.004, 0.0)
     trend = 0.002 * (t - t.mean()) / 0.06
     flux = 1.0 + depth + trend + rng.normal(0, 3e-4, n)
+    if use_gp:
+        flux = flux + 0.003 * np.sin(2 * np.pi * (t - t[0]) / 0.05)
     pd.DataFrame({'time': t, 'flux': flux,
                   'fluxerr': np.full(n, 3e-4)}).to_csv(
         os.path.join(root, 'g.csv'), index=False)
@@ -38,6 +44,12 @@ def make_project(root, n=60):
                           'period': [14.334894, 3e-5], 'ror': [0.06, 0.01],
                           't0': [2458602.5025, 0.0022]}},
     }
+    if use_gp:
+        fit_params['use_gp'] = True
+        fit_params['gp'] = {
+            'log_amp': 0.0, 'log_amp_unc': 6.0, 'log_amp_prior': 'uniform',
+            'log_scale': -2.0, 'log_scale_unc': 6.0, 'log_scale_prior': 'uniform',
+        }
     with open(os.path.join(root, 'fit.yaml'), 'w') as f:
         yaml.safe_dump(fit_params, f)
     with open(os.path.join(root, 'sys.yaml'), 'w') as f:

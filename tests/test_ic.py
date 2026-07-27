@@ -44,6 +44,13 @@ def test_count_free_params_excludes_deterministics_and_observed(gp_shaped_model)
     assert util.count_free_params(gp_shaped_model) == 13
 
 
+def test_count_free_params_can_count_the_gp_hyperparameters_alone(gp_shaped_model):
+    """The edf correction replaces the GP's hyperparameters with the degrees
+    of freedom it actually absorbs, so it has to subtract exactly what the
+    full count added: 2 of the 13, not all 13 and not 0."""
+    assert util.count_free_params(gp_shaped_model, prefix='gp_log_') == 2
+
+
 def test_count_free_params_counts_every_element_of_a_vector_parameter():
     """A shape (3,) weight vector is three parameters, not one."""
     with pm.Model() as model:
