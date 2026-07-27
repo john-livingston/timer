@@ -48,7 +48,7 @@ defaults = dict(
         clip_nsig = 7,
         binsize = 5/1440,
         chunk_offset = False,
-        chunk_thresh = 0,
+        chunk_thresh = 0.02, # gap in days above which a new offset column starts
         format = 'generic'
     ),
 )

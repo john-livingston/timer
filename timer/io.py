@@ -25,6 +25,16 @@ def read_generic(
     verbose=True
 ):
 
+    # a non-positive threshold makes np.diff(x) > chunk_thresh true at every
+    # sample, so every point becomes its own chunk and an N x N identity is
+    # appended to the design matrix, which fits the data perfectly and
+    # silently destroys the transit
+    if chunk_offset and (chunk_thresh is None or chunk_thresh <= 0):
+        raise ValueError(
+            f'chunk_thresh must be > 0 when chunk_offset is enabled, got '
+            f'{chunk_thresh!r}: every point would start its own offset column'
+        )
+
     # READ DATA
     if fp.endswith('.txt'):
         with open(fp) as f:
@@ -73,11 +83,10 @@ def read_generic(
 
     # ADD TREND/BIAS COLUMNS TO THE DESIGN MATRIX
     if trend is not None:
-        # if trend > 0, i.e. we want a linear or higher order trend
-        A = np.vander(x - 0.5*(x.min() + x.max()), trend+1)
-        if not add_bias:
-            # if we don't want to add a bias column, i.e. a column of ones
-            A = A[:,:-1]
+        # if trend > 0, i.e. we want a linear or higher order trend.
+        # np.vander's last column is constant; always drop it here so the
+        # add_bias block below is the single source of the bias column.
+        A = np.vander(x - 0.5*(x.min() + x.max()), trend+1)[:,:-1]
         if X is not None:
             X = np.c_[X, A]
         else:
@@ -105,7 +114,7 @@ def read_generic(
             prev_bkpt = bkpt
             cols.append(col)
         offsets = np.column_stack(cols)
-        X = np.c_[X, offsets]
+        X = np.c_[X, offsets] if X is not None else offsets
 
     # DISCARD BAD DATA (HIGH AIRMASS) AT THE BEGINNING OF THE TIME SERIES
     if trim_beg is not None:
@@ -120,11 +129,20 @@ def read_generic(
         if X is not None:
             X = X[ix]
 
+    # trimming past the end of the time series leaves nothing to fit, and the
+    # reductions below then fail with an opaque numpy zero-size error far from
+    # the misconfiguration that caused it
+    if x.size == 0:
+        raise ValueError(
+            f'trim_beg={trim_beg} and trim_end={trim_end} left {x.size} points '
+            f'in {os.path.basename(fp)}'
+        )
+
     # COMPUTE APPROXIMATE EXPOSURE TIME
     texp = np.median(np.diff(x))
     x_hr = np.linspace(x.min(), x.max(), 500)
 
-    if X.shape[1] == 0:
+    if X is not None and X.shape[1] == 0:
         X = None
 
     return x, y, yerr, X, texp, x_hr, ref_time
