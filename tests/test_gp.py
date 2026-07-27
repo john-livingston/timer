@@ -198,6 +198,9 @@ def test_ic_reports_edf_corrected_criteria_for_a_gp_fit(tmp_path, monkeypatch):
     rows = _ic_rows(tmp_path)
     edf = sum(model.compute_gp_edf(tf.map_soln, tf.data, tf.masks, None).values())
 
+    # an independent floor first, so the row cannot be satisfied by writing
+    # zero, or the hyperparameter count, into it
+    assert rows['edf'] > 5
     # ic.txt is written to two decimal places, hence the tolerances
     assert rows['edf'] == pytest.approx(edf, abs=0.005)
     assert rows['nparams'] == 13
