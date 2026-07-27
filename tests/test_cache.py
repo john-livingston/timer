@@ -209,3 +209,39 @@ def test_drop_entry_is_a_no_op_without_a_manifest(tmp_path):
     """Every write site drops first, including the very first one."""
     cache.drop_entry(str(tmp_path), 'map.pkl')
     assert cache.read_manifest(str(tmp_path)) is None
+
+
+def test_a_failed_manifest_write_leaves_the_previous_one_intact(tmp_path, monkeypatch):
+    """Opening the manifest for writing truncates it before anything is
+    serialized, so a crash in that window destroys every entry, including a
+    trace.pkl that cost hours. This whole module exists for crash safety, so
+    it cannot itself have a window where a crash loses data.
+    """
+    cache.write_manifest(str(tmp_path), 'trace.pkl', 'RUNKEY')
+
+    def boom(*args, **kwargs):
+        raise OSError('no space left on device')
+
+    monkeypatch.setattr(cache.json, 'dump', boom)
+    with pytest.raises(OSError):
+        cache.write_manifest(str(tmp_path), 'map.pkl', 'MODELKEY')
+
+    manifest = cache.read_manifest(str(tmp_path))
+    assert manifest is not None, 'the previous manifest was destroyed'
+    assert manifest['trace.pkl'] == 'RUNKEY'
+
+
+def test_a_failed_drop_leaves_the_previous_manifest_intact(tmp_path, monkeypatch):
+    cache.write_manifest(str(tmp_path), 'trace.pkl', 'RUNKEY')
+    cache.write_manifest(str(tmp_path), 'map.pkl', 'MODELKEY')
+
+    def boom(*args, **kwargs):
+        raise OSError('no space left on device')
+
+    monkeypatch.setattr(cache.json, 'dump', boom)
+    with pytest.raises(OSError):
+        cache.drop_entry(str(tmp_path), 'map.pkl')
+
+    manifest = cache.read_manifest(str(tmp_path))
+    assert manifest is not None
+    assert manifest['trace.pkl'] == 'RUNKEY'
