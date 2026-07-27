@@ -51,6 +51,37 @@ def test_count_free_params_can_count_the_gp_hyperparameters_alone(gp_shaped_mode
     assert util.count_free_params(gp_shaped_model, prefix='gp_log_') == 2
 
 
+def test_gp_hyperparameter_count_excludes_a_dataset_named_gp():
+    """A dataset's jitter site is {name}_log_sigma_lc, so a dataset named 'gp'
+    produces 'gp_log_sigma_lc'. Matching on the prefix 'gp_log_' swallows it,
+    the edf correction then subtracts one parameter too many, and BIC_edf comes
+    out low by log(ndata).
+    """
+    with pm.Model() as model:
+        pm.Normal('gp_log_amp', 0, 1)
+        pm.Normal('gp_log_scale', 0, 1)
+        pm.Normal('gp_log_sigma_lc', -5, 1)     # the dataset's jitter
+    assert util.count_free_params(model, prefix=util.GP_HYPERPARAM_PREFIXES) == 2
+
+
+def test_gp_hyperparameter_count_covers_per_dataset_sites():
+    """With gp.per_dataset the sites gain a dataset suffix, and those are still
+    GP hyperparameters."""
+    with pm.Model() as model:
+        pm.Normal('gp_log_amp_g', 0, 1)
+        pm.Normal('gp_log_amp_r', 0, 1)
+        pm.Normal('gp_log_scale', 0, 1)
+        pm.Normal('g_log_sigma_lc', -5, 1)
+    assert util.count_free_params(model, prefix=util.GP_HYPERPARAM_PREFIXES) == 3
+
+
+def test_compute_ic_rejects_an_unknown_method():
+    """An unrecognized method falls through every branch and raises
+    UnboundLocalError from the return, which names nothing useful."""
+    with pytest.raises(ValueError, match='WAIC'):
+        util.compute_ic(None, -100.0, 3, 100, method='WAIC', verbose=False)
+
+
 def test_count_free_params_counts_every_element_of_a_vector_parameter():
     """A shape (3,) weight vector is three parameters, not one."""
     with pm.Model() as model:

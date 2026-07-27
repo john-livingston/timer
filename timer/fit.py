@@ -515,7 +515,8 @@ class TransitFit:
         Counted off the model for the same reason as _count_params, so the
         edf correction subtracts exactly what _count_params added.
         """
-        return util.count_free_params(self.model, prefix='gp_log_')
+        return util.count_free_params(
+            self.model, prefix=util.GP_HYPERPARAM_PREFIXES)
 
     def _count_data(self):
         """Points that entered the likelihood, excluding clipped outliers."""
@@ -854,7 +855,11 @@ class TransitFit:
                 f.write(f'{ic} {val:.2f}\n')
 
             # a GP is charged for its hyperparameters but absorbs far more
-            # degrees of freedom, so report a corrected count alongside. This
+            # degrees of freedom, so report a corrected count alongside.
+            # nparams_edf is an upper bound: compute_gp_edf measures the GP
+            # smoother alone and does not subtract its overlap with the linear
+            # model, so the correction can over-penalize a GP on a wide design
+            # matrix. See compute_gp_edf's docstring. This
             # does real GP linear algebra and reads GP hyperparameters back
             # out of map_soln, so it can fail (e.g. a force-loaded map.pkl
             # whose gp.per_dataset no longer matches the current config); a

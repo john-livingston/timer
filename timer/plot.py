@@ -515,7 +515,9 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
                 log_scale = float(np.median(post['gp_log_scale'].values))
             kernel = celerite_terms.Matern32Term(sigma=10**log_amp, rho=10**log_scale)
             residuals = y[mask] - (tra_mod + sys_mod)
-            diag = np.exp(2*lcjit) + yerr[mask]**2
+            # lcjit is already exp(log_sigma_lc), so this squares it rather
+            # than exponentiating again; the model uses exp(2*log_sigma_lc)
+            diag = lcjit**2 + yerr[mask]**2
             gp = CeleriteGP(kernel)
             gp.compute(x[mask], diag=diag)
             gp_mod = gp.predict(residuals)

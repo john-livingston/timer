@@ -662,6 +662,15 @@ def compute_gp_edf(map_soln, datasets, masks, gp_config, max_points=5000):
     since the cost is prohibitive at survey scale. Returning None rather than
     a partial sum keeps the caller from reporting a number that omits a
     dataset.
+
+    This is the smoother trace of the GP alone. When the model also has a
+    linear systematics term, the two overlap: the joint effective degrees of
+    freedom is p + tr(K C^-1) - tr(K C^-1 P), with P the design matrix's
+    projection under C. The overlap term is not subtracted here, so adding
+    this to the parametric count gives an upper bound rather than an exact
+    figure, by up to the number of design matrix columns. The bias always
+    penalizes the GP, so it cannot manufacture a preference for one, but it
+    can suppress a real one on a wide design matrix.
     """
     for name, data in datasets.items():
         mask = masks[name]
