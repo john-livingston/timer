@@ -71,7 +71,9 @@ def optimize(
     
     try:
         info = minimize(objective, x0, **kwargs)
-    except (KeyboardInterrupt, StopIteration):
+    except StopIteration:
+        # KeyboardInterrupt deliberately propagates: an interrupted run must
+        # not fall through and cache the init point as the MAP
         info = None
     finally:
         if verbose and progress:

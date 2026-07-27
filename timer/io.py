@@ -5,6 +5,26 @@ import pandas as pd
 from .util import bin_df, get_spline_basis
 
 
+# design matrix column blocks, in the order read_generic appends them
+COLUMN_BLOCKS = ('covariates', 'trend', 'spline', 'bias', 'chunk')
+
+
+def split_design(X, weights, layout):
+    """Split a design matrix and its weights into named column blocks.
+
+    Returns {block: (columns, weights)}. A block with no columns comes back
+    with an (n, 0) array rather than being omitted, so callers can index it
+    unconditionally.
+    """
+    blocks = {}
+    start = 0
+    for key in COLUMN_BLOCKS:
+        n = layout.get(key, 0)
+        blocks[key] = (X[:, start:start+n], weights[start:start+n])
+        start += n
+    return blocks
+
+
 def read_generic(
     fp, 
     binsize=1/1440,
@@ -54,6 +74,10 @@ def read_generic(
     x, y, yerr = df[[timecol, fluxcol, errcol]].values.T
     aux_cols = [c for c in df.columns if c not in [timecol, fluxcol, errcol]]
     X = df[aux_cols].values if len(aux_cols) > 0 else None
+    # how many columns each block below contributes, so consumers can slice
+    # the design matrix by block instead of re-deriving the sizes from the
+    # config, which cannot see the chunk offsets
+    layout = dict.fromkeys(COLUMN_BLOCKS, 0)
 
     # PROCESS TIME AND FLUX
     x += timeoffset
@@ -81,23 +105,26 @@ def read_generic(
         # X -= X.mean(axis=0)
         # X /= X.std(axis=0)
 
+        layout['covariates'] = X.shape[1]
+
     # ADD TREND/BIAS COLUMNS TO THE DESIGN MATRIX
     if trend is not None:
         # if trend > 0, i.e. we want a linear or higher order trend.
         # np.vander's last column is constant; always drop it here so the
         # add_bias block below is the single source of the bias column.
         A = np.vander(x - 0.5*(x.min() + x.max()), trend+1)[:,:-1]
+        layout['trend'] = A.shape[1]
         if X is not None:
             X = np.c_[X, A]
         else:
             X = A
     if spline:
-        if X is not None:
-            X = np.c_[X, get_spline_basis(x, n_knots=spline_knots)]
-        else:
-            X = get_spline_basis(x, n_knots=spline_knots)
+        basis = get_spline_basis(x, n_knots=spline_knots)
+        layout['spline'] = basis.shape[1]
+        X = np.c_[X, basis] if X is not None else basis
     if add_bias:
         # if trend = None but we want to add a bias column (not needed if include_mean=True in model)
+        layout['bias'] = 1
         if X is not None:
             X = np.c_[X, np.ones_like(x)]
         else:
@@ -114,6 +141,7 @@ def read_generic(
             prev_bkpt = bkpt
             cols.append(col)
         offsets = np.column_stack(cols)
+        layout['chunk'] = offsets.shape[1]
         X = np.c_[X, offsets] if X is not None else offsets
 
     # DISCARD BAD DATA (HIGH AIRMASS) AT THE BEGINNING OF THE TIME SERIES
@@ -145,7 +173,7 @@ def read_generic(
     if X is not None and X.shape[1] == 0:
         X = None
 
-    return x, y, yerr, X, texp, x_hr, ref_time
+    return x, y, yerr, X, texp, x_hr, ref_time, layout
 
 def read_afphot(
     fp, 

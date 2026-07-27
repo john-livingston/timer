@@ -212,7 +212,7 @@ class TransitFit:
                 read_fn = io.read_afphot
             else:
                 raise ValueError("format must be 'generic' or 'afphot'")
-            x, y, yerr, X, texp, x_hr, ref_time = read_fn(
+            x, y, yerr, X, texp, x_hr, ref_time, ncols = read_fn(
                 fp, 
                 binsize=data[n]['binsize'],
                 spline=data[n]['spline'],
@@ -229,7 +229,8 @@ class TransitFit:
             logging.info(f'loading data: {fn}')
             logging.info(f'data span: {data_iso[0]} - {data_iso[1]}')
             logging.info(f'ref. time: {ref_time}')
-            self.data[n] = dict(x=x, y=y, yerr=yerr, X=X, texp=texp, x_hr=x_hr, band=b, ref_time=ref_time)
+            self.data[n] = dict(x=x, y=y, yerr=yerr, X=X, texp=texp, x_hr=x_hr, band=b,
+                                ref_time=ref_time, ncols=ncols)
             self.masks[n] = None
         ref_times = [v['ref_time'] for k,v in self.data.items()]
         self.ref_time = min(ref_times)
@@ -789,14 +790,17 @@ class TransitFit:
     def save_results(self):
         print('saving results')
         flat_samps = self.trace.posterior.stack(sample=("chain", "draw"))
-        t0_s = flat_samps['t0'].values
+        # transit times reported in the data's native time system (t0 + ref_time)
+        if 't0' in flat_samps.data_vars:
+            lines = util.format_tc_lines(
+                self.planets, self.ref_time, t0_samples=flat_samps['t0'].values)
+        else:
+            # t0 was held fixed, so it is not in the posterior
+            lines = util.format_tc_lines(
+                self.planets, self.ref_time, t0_fixed=self.priors['t0'])
         with open(os.path.join(self.outdir, 'tc.txt'), 'w') as f:
-            # transit times reported in the data's native time system (t0 + ref_time)
-            if self.nplanets > 1:
-                for i in range(self.nplanets):
-                    f.write(f'{self.planets[i]} {t0_s[i,:].mean() + self.ref_time} {t0_s[i,:].std()}\n')
-            else:
-                f.write(f'{self.planets[0]} {t0_s.mean() + self.ref_time} {t0_s.std()}\n')
+            for line in lines:
+                f.write(f'{line}\n')
         with open(os.path.join(self.outdir, 'ic.txt'), 'w') as f:
             soln, max_logp = util.get_map_soln(self.trace)
             nparams = self._count_params()
