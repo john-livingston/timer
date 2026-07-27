@@ -595,8 +595,14 @@ def systematics(fit, name, style=1):
     mask = fit.masks[name]
     if mask is None:
         mask = np.ones(len(x), dtype=bool)
-    w = fit.map_soln[f'{name}_weights']
-    nspline = layout['spline']
+    if X is None:
+        # a GP only fit has no design matrix, and so no weights site either.
+        # An empty matrix keeps every block below well defined so the GP panel
+        # can still be drawn.
+        X = np.zeros((len(x), 0))
+        w = np.zeros(0)
+    else:
+        w = fit.map_soln[f'{name}_weights']
     covariates = layout['covariates'] > 0
 
     # GP prediction from MAP

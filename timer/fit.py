@@ -483,7 +483,6 @@ class TransitFit:
             total += len(data['x']) if mask is None else int(np.sum(mask))
         return total
 
-
     def plot_systematics(self, name, style=2, fn=None):
 
         fig = plot.systematics(self, name, style=style)
@@ -602,7 +601,6 @@ class TransitFit:
         # it even though map.pkl itself was never flagged
         if not stale_trace and 'map.pkl' not in self._stale_force_loaded:
             cache.write_manifest(self.outdir, 'map.pkl', self._cache_keys['model'])
-
 
         if plot_fit:
             self.plot_multi(fn='fit.png')
