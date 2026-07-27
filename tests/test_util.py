@@ -187,6 +187,35 @@ def test_get_residuals_sums_over_the_planet_axis():
     assert resid == pytest.approx(np.full(n, 1.25))
 
 
+# --------------------------------------------------------------- tc.txt
+
+def test_format_tc_lines_reports_sampled_times_in_the_native_system():
+    """tc.txt carries absolute BJD, so ref_time has to go back on. Hand
+    derived: mean 0.5 and population std sqrt(0.02/3) = 0.0816496580927726."""
+    lines = util.format_tc_lines(['c'], 2460000.0,
+                                 t0_samples=np.array([[0.4, 0.5, 0.6]]))
+    planet, tc, unc = lines[0].split()
+    assert planet == 'c'
+    assert float(tc) == pytest.approx(2460000.5)
+    assert float(unc) == pytest.approx(0.0816496580927726)
+
+
+def test_format_tc_lines_reports_a_fixed_time_with_zero_uncertainty():
+    """A fixed t0 is not in the posterior at all, so reading it from the trace
+    raises and tc.txt is never written."""
+    assert util.format_tc_lines(['c'], 2460000.0, t0_fixed=np.array([0.25])) == \
+        ['c 2460000.25 0.0']
+
+
+def test_format_tc_lines_keeps_planets_and_their_samples_paired():
+    """Two planets have different transit times; transposing the sample array
+    would swap them."""
+    samples = np.array([[0.4, 0.5, 0.6], [1.0, 1.2, 1.4]])
+    lines = util.format_tc_lines(['b', 'c'], 2460000.0, t0_samples=samples)
+    assert [line.split()[:2] for line in lines] == \
+        [['b', '2460000.5'], ['c', '2460001.2']]
+
+
 # ------------------------------------------------------------- claret bands
 
 @pytest.mark.parametrize('band,expected', [

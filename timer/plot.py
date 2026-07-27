@@ -63,8 +63,9 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
         param_names = []
         
         # Transit parameters
-        param_names += [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
-        
+        if 't0' not in fixed:
+            param_names += [f't0_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['t0']
+
         for par in 'dur period b'.split():
             if par not in fixed:
                 param_names += [f'{par}_{i+1}' for i in range(nplanets)] if nplanets > 1 else [par]
@@ -577,22 +578,26 @@ def light_curve(data, name, soln, nplanets, mask=None, trace=None, use_gp=False,
 
 def systematics(fit, name, style=1):
 
+    # imported here rather than at module level: io imports util, and util
+    # imports this module, so a top level import would be circular
+    from . import io
+
     trend = fit.fit_params['data'][name]['trend']
-    ntrend = trend if trend else 0
     spline = fit.fit_params['data'][name]['spline']
-    nspline = fit.fit_params['data'][name]['spline_knots'] if spline else 0
-    bias = fit.fit_params['data'][name]['add_bias']
-    nbias = 1 if bias else 0
     use_gp = fit.use_gp
 
     x = fit.data[name]['x']
     X = fit.data[name]['X']
+    # the column layout recorded by io.read_generic. Re-deriving it from the
+    # config here cannot see the chunk offset columns, which are appended last,
+    # so every block boundary would be shifted by the number of chunks.
+    layout = fit.data[name]['ncols']
     mask = fit.masks[name]
     if mask is None:
         mask = np.ones(len(x), dtype=bool)
     w = fit.map_soln[f'{name}_weights']
-    covariates = not X.shape[1] == nspline + ntrend + nbias
-    ncovariates = X.shape[1] - ntrend - nspline - nbias
+    nspline = layout['spline']
+    covariates = layout['covariates'] > 0
 
     # GP prediction from MAP
     gp_pred = fit.map_soln.get(f'{name}_gp_pred', None) if use_gp else None
@@ -605,12 +610,10 @@ def systematics(fit, name, style=1):
 
     x_ = x[mask]
     X_ = X[mask]
-    X_cov = X_[:,:ncovariates]
-    w_cov = w[:ncovariates]
-    X_tre = X_[:,ncovariates:(ncovariates+ntrend)]
-    w_tre = w[ncovariates:(ncovariates+ntrend)]
-    X_spl = X_[:,(ncovariates+ntrend):(ncovariates+ntrend+nspline)]
-    w_spl = w[(ncovariates+ntrend):(ncovariates+ntrend+nspline)]
+    blocks = io.split_design(X_, w, layout)
+    (X_cov, w_cov) = blocks['covariates']
+    (X_tre, w_tre) = blocks['trend']
+    (X_spl, w_spl) = blocks['spline']
 
     if style == 1:
 
