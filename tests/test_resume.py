@@ -132,6 +132,141 @@ def test_build_model_records_both_artifacts_under_the_model_key(tmp_path, stub_b
     assert manifest['map.pkl'] == 'MODELKEY'
 
 
+def test_a_crash_during_the_rebuild_leaves_no_entry(tmp_path, monkeypatch):
+    """An artifact stops being valid when the rebuild starts, not when it ends.
+
+    clip_outliers records the new mask and then calls build_model(force=True)
+    to refit on it. If that build dies, and the entries for the previous
+    model.pkl/map.pkl are still standing, the next run reuses a model fitted
+    to the unclipped data while _count_data reports the clipped total: the
+    likelihood and every information criterion then disagree about how many
+    points there are, permanently and with no warning.
+
+    Ctrl-C is a live exit path here by design, so this is reachable without
+    any hardware failure.
+    """
+    from timer import cache, fit
+
+    cache.write_manifest(str(tmp_path), 'model.pkl', 'MODELKEY')
+    cache.write_manifest(str(tmp_path), 'map.pkl', 'MODELKEY')
+
+    def boom(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(fit.model, 'build', boom)
+    tf = _bare_fit(tmp_path, stale=set(), model=_FakeModel(),
+                   map_soln={'stale': np.array(1.0)})
+
+    with pytest.raises(KeyboardInterrupt):
+        tf.build_model(force=True, plot=False)
+
+    manifest = cache.read_manifest(str(tmp_path)) or {}
+    assert 'model.pkl' not in manifest
+    assert 'map.pkl' not in manifest
+
+
+def test_a_stale_mask_disqualifies_the_model_built_on_it(tmp_path, stub_build):
+    """mask.pkl feeds model.build, so a force-loaded stale mask contaminates
+    the model and MAP just as surely as a stale map.pkl does.
+
+    Reachable whenever the mask outlives the other artifacts: a config edit
+    plus a deleted map.pkl, or a run that died before build_model finished.
+    Recording the rebuilt pair under the current key would let the next
+    ordinary run adopt a model fitted to a mask the config no longer produces,
+    with no warning at all.
+    """
+    from timer import cache
+
+    tf = _bare_fit(tmp_path, stale={'mask.pkl'}, model=None, map_soln=None)
+
+    tf.build_model(plot=False)
+
+    assert len(stub_build) == 1
+    manifest = cache.read_manifest(str(tmp_path)) or {}
+    assert 'model.pkl' not in manifest
+    assert 'map.pkl' not in manifest
+
+
+def _bare_fit_for_load(tmp_path, datasets):
+    """A TransitFit carrying only what load_saved reads, over real data files."""
+    from timer import fit
+
+    for name in datasets:
+        (tmp_path / f'{name}.csv').write_text(
+            'time,flux,fluxerr\n0.0,1.0,0.001\n0.1,1.0,0.001\n')
+    tf = fit.TransitFit.__new__(fit.TransitFit)
+    tf.wd = str(tmp_path)
+    tf.outdir = str(tmp_path / 'out')
+    tf.clobber = False
+    tf._force_load_saved = True
+    tf.fit_params = {
+        'data': {n: {'file': f'{n}.csv', 'band': n} for n in datasets},
+        'tune': 5, 'draws': 5, 'chains': 1, 'cores': 1, 'clobber': False,
+    }
+    tf.sys_params = {'star': {}, 'planets': {}}
+    # the skeleton load_data leaves behind: one entry per dataset, all unclipped
+    tf.masks = {n: None for n in datasets}
+    tf.data = {n: {'x': np.zeros(2)} for n in datasets}
+    tf.model = tf.map_soln = tf.trace = None
+    return tf
+
+
+def test_loading_a_mask_keeps_the_datasets_it_does_not_mention(tmp_path):
+    """A mask.pkl from a run with fewer datasets must not replace the whole
+    dict, or every later lookup by name raises KeyError.
+
+    Adding a dataset to fit.yaml and opening the old output with from_dir is
+    exactly the case from_dir exists to survive, and it currently dies in
+    clip_outliers rather than warning.
+    """
+    from timer import fit
+
+    tf = _bare_fit_for_load(tmp_path, ['g', 'r'])
+    os.makedirs(tf.outdir, exist_ok=True)
+    old = np.array([True, False])
+    with open(os.path.join(tf.outdir, 'mask.pkl'), 'wb') as f:
+        fit.pickle.dump({'g': old}, f)
+
+    tf.load_saved()
+
+    assert set(tf.masks) == {'g', 'r'}
+    assert tf.masks['g'] is not None
+    assert tf.masks['r'] is None
+
+
+def test_loading_a_mask_ignores_datasets_the_config_no_longer_has(tmp_path):
+    """Removing a dataset from fit.yaml leaves its mask in mask.pkl. Looking
+    that name up in self.data to length check it raises KeyError, so the
+    unknown entry has to be skipped before anything else touches it."""
+    from timer import fit
+
+    tf = _bare_fit_for_load(tmp_path, ['g'])
+    os.makedirs(tf.outdir, exist_ok=True)
+    with open(os.path.join(tf.outdir, 'mask.pkl'), 'wb') as f:
+        fit.pickle.dump({'g': np.array([True, False]),
+                         'z': np.array([True, True])}, f)
+
+    tf.load_saved()
+
+    assert set(tf.masks) == {'g'}
+
+
+def test_loading_a_mask_drops_entries_whose_length_no_longer_matches(tmp_path):
+    """A binsize or trim edit changes how many points a dataset has. A mask of
+    the old length silently misaligns with the data instead of failing, so it
+    has to be discarded rather than adopted."""
+    from timer import fit
+
+    tf = _bare_fit_for_load(tmp_path, ['g'])
+    os.makedirs(tf.outdir, exist_ok=True)
+    with open(os.path.join(tf.outdir, 'mask.pkl'), 'wb') as f:
+        fit.pickle.dump({'g': np.ones(7, dtype=bool)}, f)   # data has 2 points
+
+    tf.load_saved()
+
+    assert tf.masks['g'] is None
+
+
 def test_a_crash_while_overwriting_an_artifact_leaves_no_entry(
         tmp_path, stub_build, monkeypatch):
     """Why the manifest entry is dropped before the file is rewritten.

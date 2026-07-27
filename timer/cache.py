@@ -89,12 +89,30 @@ def read_manifest(outdir):
     return manifest
 
 
+def _write_atomically(outdir, manifest):
+    """Serialize to a sibling temporary file, then rename over the manifest.
+
+    Opening the manifest itself for writing truncates it before anything is
+    serialized, so a crash in that window would lose every entry, including a
+    trace that cost hours to produce. os.replace is atomic within a directory,
+    so a reader sees either the old manifest or the new one.
+    """
+    fp = manifest_path(outdir)
+    tmp = fp + '.tmp'
+    try:
+        with open(tmp, 'w') as f:
+            json.dump(manifest, f, indent=2, sort_keys=True)
+        os.replace(tmp, fp)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
 def write_manifest(outdir, artifact, key):
     """Record that `artifact` was written under `key`, preserving other entries."""
     manifest = read_manifest(outdir) or {'format_version': FORMAT_VERSION}
     manifest[artifact] = key
-    with open(manifest_path(outdir), 'w') as f:
-        json.dump(manifest, f, indent=2, sort_keys=True)
+    _write_atomically(outdir, manifest)
 
 
 def is_valid(manifest, artifact, expected_key):
@@ -116,5 +134,4 @@ def drop_entry(outdir, artifact):
     if not manifest or artifact not in manifest:
         return
     del manifest[artifact]
-    with open(manifest_path(outdir), 'w') as f:
-        json.dump(manifest, f, indent=2, sort_keys=True)
+    _write_atomically(outdir, manifest)
