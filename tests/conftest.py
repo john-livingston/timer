@@ -1,6 +1,58 @@
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
+
+
+def make_project(root, n=60):
+    """Write a minimal but complete timer project into `root`.
+
+    One dataset in a single band, a linear trend, a boxy transit and white
+    noise. Small enough that a full build plus a short sample runs in seconds,
+    and real enough that every stage of the pipeline actually executes.
+    """
+    os.makedirs(root, exist_ok=True)
+    rng = np.random.default_rng(11)
+    t = np.linspace(2460423.0, 2460423.12, n)
+    depth = np.where(np.abs(t - 2460423.06) < 0.02, -0.004, 0.0)
+    trend = 0.002 * (t - t.mean()) / 0.06
+    flux = 1.0 + depth + trend + rng.normal(0, 3e-4, n)
+    pd.DataFrame({'time': t, 'flux': flux,
+                  'fluxerr': np.full(n, 3e-4)}).to_csv(
+        os.path.join(root, 'g.csv'), index=False)
+    fit_params = {
+        'data': {'g': {'file': 'g.csv', 'band': 'g', 'trend': 1,
+                       'binsize': None, 'format': 'generic'}},
+        'planets': 'c',
+        'tc_pred': 2460423.06,
+        'tc_pred_unc': 0.02,
+        'chromatic': False,
+        'fixed': ['period', 'u_star'],
+        'tune': 5, 'draws': 5, 'chains': 1, 'cores': 1,
+    }
+    sys_params = {
+        'star': {'teff': [5675, 75], 'logg': [4.2, 0.2], 'feh': [0.0, 0.5]},
+        'planets': {'c': {'b': [0.15, 0.15], 'dur': [0.04, 0.005],
+                          'period': [14.334894, 3e-5], 'ror': [0.06, 0.01],
+                          't0': [2458602.5025, 0.0022]}},
+    }
+    with open(os.path.join(root, 'fit.yaml'), 'w') as f:
+        yaml.safe_dump(fit_params, f)
+    with open(os.path.join(root, 'sys.yaml'), 'w') as f:
+        yaml.safe_dump(sys_params, f)
+    return fit_params, sys_params
+
+
+@pytest.fixture
+def make_project_fn():
+    return make_project
+
+
+@pytest.fixture(scope='module')
+def make_project_module():
+    return make_project
 
 
 @pytest.fixture

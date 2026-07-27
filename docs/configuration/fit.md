@@ -185,4 +185,4 @@ Multiple bumps work the same as multiple flares -- use lists for any subset of `
 | `draws`   | Number of posterior draws | `2000` |
 | `chains`  | Number of MCMC chains | `2` |
 | `cores`   | Number of CPU cores | `2` |
-| `clobber` | Re-run even if saved results exist | `false` |
+| `clobber` | Re-run even if saved results exist. Saved results are also discarded automatically when the config or data no longer match what produced them | `false` |

@@ -54,20 +54,35 @@ def get_residuals(name, y, soln, mask=None):
 
     return y[mask] - tra_mod - sys_mod
 
+# PyMC deterministic sites and the observed site, plus the post-hoc GP
+# prediction added by model._add_gp_predictions. None of these are free
+# parameters, and all are consumed as flat arrays.
+DERIVED_SUFFIXES = ('_light_curves', '_light_curves_hr', '_lc_pred', '_lm',
+                    '_flare', '_bump', '_y_observed', '_gp_pred')
+
+
 def get_map_soln(trace):
-    # arviz trace is an InferenceData object
-    max_lp = trace.sample_stats["lp"].max()
-    ix = trace.sample_stats["lp"] == max_lp
-    trace_map = trace.posterior.where(ix, drop=True)
-    flat_samps_map = trace_map.stack(sample=("chain", "draw"))
+    # arviz trace is an InferenceData object.
+    # Index the single best sample rather than masking a copy of the whole
+    # posterior: selecting by equality keeps every draw that ties on lp, and
+    # short chains repeat samples often. nanargmax/nanmax also skip nan log
+    # probabilities rather than selecting a nan sample as the best one.
+    lp_values = np.asarray(trace.sample_stats["lp"].values)
+    chain, draw = np.unravel_index(np.nanargmax(lp_values), lp_values.shape)
+    trace_map = trace.posterior.isel(chain=chain, draw=draw)
     soln = {}
-    for k, v in flat_samps_map.data_vars.items():
-        val = v.values
-        if val.size == 1:
-            soln[k] = val.item()
-        else:
+    for k, v in trace_map.data_vars.items():
+        val = np.asarray(v.values)
+        if k.endswith(DERIVED_SUFFIXES):
+            # derived quantities are consumed as flat arrays, so drop the
+            # planet axis a single planet leaves behind
             soln[k] = np.squeeze(val)
-    return soln, max_lp.values.item()
+        else:
+            # free parameters go back to pm.sample as initvals, which type
+            # checks them against the model's declared shapes, so a shape (1,)
+            # site must not come back as a Python float
+            soln[k] = val
+    return soln, float(np.nanmax(lp_values))
 
 def get_var_names(data, bands, fit_basis, use_gp, fixed,
                   chromatic=False, log_sigma=True, weights=False, gp_config=None):
