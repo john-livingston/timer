@@ -4,7 +4,7 @@ matplotlib.use('Agg')
 import numpy as np
 import pytest
 
-from timer import plot
+from timer import io, plot
 
 
 def _fit_with_chunk_offsets():
@@ -60,6 +60,32 @@ def test_systematics_plots_only_the_covariate_in_the_covariate_panel():
     basis_lines = [line for line in ax.lines if line.get_color() != 'k']
     assert len(basis_lines) == 1
     assert basis_lines[0].get_ydata() == pytest.approx(X[:, 0])
+
+
+def test_systematics_plots_the_gp_when_there_is_no_design_matrix():
+    """A GP only fit has no design matrix, and therefore no weights site
+    either, so reading X.shape or {name}_weights raises.
+
+    sample() calls plot_systematics for every dataset, so this takes down the
+    whole run after the sampling has already finished.
+    """
+    n = 12
+    x = np.linspace(0.0, 1.0, n)
+    gp_pred = np.sin(5 * x)
+
+    class _Fit:
+        use_gp = True
+        masks = {'g': None}
+        map_soln = {'g_gp_pred': gp_pred}
+        data = {'g': dict(x=x, X=None, ncols=dict.fromkeys(io.COLUMN_BLOCKS, 0))}
+        fit_params = {'data': {'g': dict(trend=None, spline=False, spline_knots=5,
+                                         add_bias=False, chunk_offset=False,
+                                         chunk_thresh=0.02)}}
+
+    fig = plot.systematics(_Fit(), 'g', style=2)
+
+    ax = _panel(fig, 'GP')
+    assert ax.lines[0].get_ydata() == pytest.approx(gp_pred)
 
 
 def test_systematics_sums_the_whole_design_matrix():
