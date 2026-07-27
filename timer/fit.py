@@ -10,7 +10,7 @@ import logging
 import argparse
 import shutil
 
-from . import io, util, plot, model
+from . import io, util, plot, model, cache
 
 
 defaults = dict(
@@ -173,6 +173,7 @@ class TransitFit:
         self.clobber = fit_params['clobber']
         # initialize
         self.model = None
+        self.map_soln = None
         self.trace = None
         self.masks = {}
         self.bands = []
@@ -239,21 +240,72 @@ class TransitFit:
                 v['x_hr'] += delta
                 v['ref_time'] = self.ref_time
 
+    def _may_load(self, artifact, tier, manifest):
+        """Whether `artifact` in the output directory matches the current inputs.
+
+        On mismatch this warns and returns False, so the existing gates in
+        build_model/sample/clip_outliers recompute naturally. from_dir sets
+        _force_load_saved because loading a finished run for plotting is an
+        explicit request for those specific artifacts; it still warns, and
+        records the mismatch in _stale_force_loaded.
+
+        A name in _stale_force_loaded is never reused as if it matched
+        (build_model rebuilds and re-optimizes, sample re-runs MCMC) and is
+        never recorded in the manifest under the current key, nor is anything
+        derived from it. mask.pkl is a known exception: clip_outliers gates on
+        `self.masks[name] is None` rather than consulting
+        _stale_force_loaded, so a force-loaded stale mask is reused for the
+        model build and the likelihood instead of being recomputed. The safe
+        outcome is then no manifest entry at all, so the next ordinary run
+        recomputes rather than trusting an artifact this session only loaded
+        because from_dir asked for it.
+        """
+        if cache.is_valid(manifest, artifact, self._cache_keys[tier]):
+            return True
+        logging.warning(
+            f'{artifact} does not match the current config or data '
+            f'({tier} key changed); it will be recomputed'
+        )
+        if self._force_load_saved:
+            logging.warning(f'loading {artifact} anyway, as requested by from_dir')
+            self._stale_force_loaded.add(artifact)
+            if artifact == 'mask.pkl':
+                logging.warning(
+                    'clip_outliers does not consult _stale_force_loaded, so this '
+                    'stale mask.pkl will be reused as-is, not recomputed'
+                )
+            return True
+        return False
+
     def load_saved(self):
         if not os.path.exists(self.outdir):
             os.mkdir(self.outdir)
+        # computed unconditionally: build_model/sample/clip_outliers record
+        # these keys when they write, including on the clobber path
+        self._cache_keys = cache.compute_keys(
+            self.fit_params, self.sys_params, self.wd)
+        # artifact names force-loaded below despite a key mismatch (from_dir
+        # only); always initialized, including on the clobber early return,
+        # so the write sites can check it unconditionally
+        self._stale_force_loaded = set()
         # Load saved files if clobber is False OR if force_load_saved is True (from from_dir)
-        if not self.clobber or self._force_load_saved:
-            if os.path.exists(os.path.join(self.outdir, 'mask.pkl')):
+        if self.clobber and not self._force_load_saved:
+            return
+        manifest = cache.read_manifest(self.outdir)
+        if os.path.exists(os.path.join(self.outdir, 'mask.pkl')):
+            if self._may_load('mask.pkl', 'model', manifest):
                 logging.info('loading mask(s) from mask.pkl')
                 self.masks = pickle.load(open(os.path.join(self.outdir, 'mask.pkl'), 'rb'))
-            if os.path.exists(os.path.join(self.outdir, 'model.pkl')):
+        if os.path.exists(os.path.join(self.outdir, 'model.pkl')):
+            if self._may_load('model.pkl', 'model', manifest):
                 logging.info('loading model from model.pkl')
                 self.model = pickle.load(open(os.path.join(self.outdir, 'model.pkl'), 'rb'))
-            if os.path.exists(os.path.join(self.outdir, 'map.pkl')):
+        if os.path.exists(os.path.join(self.outdir, 'map.pkl')):
+            if self._may_load('map.pkl', 'model', manifest):
                 logging.info('loading MAP solution from map.pkl')
                 self.map_soln = pickle.load(open(os.path.join(self.outdir, 'map.pkl'), 'rb'))
-            if os.path.exists(os.path.join(self.outdir, 'trace.pkl')):
+        if os.path.exists(os.path.join(self.outdir, 'trace.pkl')):
+            if self._may_load('trace.pkl', 'run', manifest):
                 logging.info('loading trace from trace.pkl')
                 self.trace = pickle.load(open(os.path.join(self.outdir, 'trace.pkl'), 'rb'))
 
@@ -350,7 +402,17 @@ class TransitFit:
                 self.priors[f'{key}_prior'] = gp[f'{p}_prior']
 
     def build_model(self, start=None, force=False, verbose=False, plot=True):
-        if force or self.clobber or self.model is None:
+        # model.pkl and map.pkl are validated separately, so one can survive
+        # the other; both are needed to skip the rebuild. A pickle force-loaded
+        # despite a key mismatch belongs to a different config, so it is
+        # present but must not be reused: treat it as absent.
+        reuse = (not (force or self.clobber)
+                 and self.model is not None
+                 and self.map_soln is not None
+                 and not (self._stale_force_loaded & {'model.pkl', 'map.pkl'}))
+        if reuse:
+            logging.info('reusing cached model and MAP solution')
+        else:
             logging.info('building and optimizing model')
             data, priors, masks = self.data, self.priors, self.masks
             nplanets, use_gp, chromatic = self.nplanets, self.use_gp, self.chromatic
@@ -363,8 +425,15 @@ class TransitFit:
                 verbose=verbose, use_custom_optimizer=use_custom_optimizer, gp_config=self.gp_config
             )
             logging.info(f"Model: {self.model}")
-            pickle.dump(self.model, open(os.path.join(self.outdir, 'model.pkl'), 'wb'))
-            pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
+            # the two are written together and reused together, and a stale MAP
+            # can seed this optimization through clip_outliers' start argument,
+            # so either one being force-loaded stale disqualifies both
+            stale_pair = bool(self._stale_force_loaded & {'model.pkl', 'map.pkl'})
+            for artifact, obj in (('model.pkl', self.model), ('map.pkl', self.map_soln)):
+                cache.drop_entry(self.outdir, artifact)
+                pickle.dump(obj, open(os.path.join(self.outdir, artifact), 'wb'))
+                if not stale_pair:
+                    cache.write_manifest(self.outdir, artifact, self._cache_keys['model'])
         # for name in self.data.keys():
         #     fn = f'fit-{name}.png'
         #     self.plot(name, fn=fn)
@@ -470,13 +539,21 @@ class TransitFit:
                     if n_outliers > 0:
                         logging.info(f'clipped {n_outliers} outlier(s)')
                         clipped = True
+        cache.drop_entry(self.outdir, 'mask.pkl')
         pickle.dump(self.masks, open(os.path.join(self.outdir, 'mask.pkl'), 'wb'))
+        if 'mask.pkl' not in self._stale_force_loaded:
+            cache.write_manifest(self.outdir, 'mask.pkl', self._cache_keys['model'])
         if clipped:
             self.build_model(start=self.map_soln, force=True)
             
     def sample(self, fn=None, plot_fit=True, plot_systematics=True):
 
-        if self.clobber or self.trace is None:
+        # a trace.pkl force-loaded despite a key mismatch was produced under a
+        # different config, so it is present but unusable: sample as if it were
+        # absent, and never vouch for it or for the map.pkl derived from it
+        # below, whether or not MCMC re-ran
+        stale_trace = 'trace.pkl' in self._stale_force_loaded
+        if self.clobber or self.trace is None or stale_trace:
             tune = self.tune
             draws = self.draws
             chains = self.chains
@@ -490,7 +567,10 @@ class TransitFit:
                 chains=chains,
                 cores=cores
             )
+            cache.drop_entry(self.outdir, 'trace.pkl')
             pickle.dump(self.trace, open(os.path.join(self.outdir, 'trace.pkl'), 'wb'))
+            if not stale_trace:
+                cache.write_manifest(self.outdir, 'trace.pkl', self._cache_keys['run'])
 
         with self.model:
             self.summary = util.get_summary(
@@ -507,8 +587,14 @@ class TransitFit:
         if self.use_gp:
             from .model import _add_gp_predictions
             self.map_soln = _add_gp_predictions(self.map_soln, self.data, self.masks, self.gp_config)
+        cache.drop_entry(self.outdir, 'map.pkl')
         pickle.dump(self.map_soln, open(os.path.join(self.outdir, 'map.pkl'), 'wb'))
-            
+        # this map.pkl is derived from the trace, so a stale trace disqualifies
+        # it even though map.pkl itself was never flagged
+        if not stale_trace and 'map.pkl' not in self._stale_force_loaded:
+            cache.write_manifest(self.outdir, 'map.pkl', self._cache_keys['model'])
+
+
         if plot_fit:
             self.plot_multi(fn='fit.png')
             if self.chromatic:

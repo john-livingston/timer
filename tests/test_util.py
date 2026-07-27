@@ -1,7 +1,79 @@
+import arviz as az
 import numpy as np
 import pytest
 
 from timer import util
+
+
+# --------------------------------------------------------------- map soln
+
+def _trace(lp, n=6):
+    """An InferenceData with two chains, three draws and per-draw values that
+    identify which sample was selected.
+
+    Every posterior variable is filled with its flat sample index, so the
+    returned MAP solution says unambiguously which draw it came from.
+    """
+    chains, draws = lp.shape
+    idx = np.arange(chains * draws, dtype=float).reshape(chains, draws)
+    posterior = {
+        't0': idx[..., None],
+        'g_weights': idx[..., None] * 10,
+        'g_mean': idx,
+        'g_lm': np.broadcast_to(idx[..., None], (chains, draws, n)).copy(),
+        'g_light_curves': np.broadcast_to(
+            idx[..., None, None], (chains, draws, n, 1)).copy(),
+    }
+    return az.from_dict(posterior=posterior, sample_stats={'lp': lp})
+
+
+def test_get_map_soln_picks_one_sample_when_log_probabilities_tie():
+    """Short chains repeat samples, so more than one draw can hold the maximum.
+
+    Selecting by equality then keeps every tie, and each model component comes
+    back with a trailing sample axis: the systematics model becomes (n, 2) and
+    no longer broadcasts against the data.
+    """
+    lp = np.array([[-101.0, -100.0, -102.0], [-100.0, -103.0, -104.0]])
+    soln, _ = util.get_map_soln(_trace(lp))
+    assert soln['g_lm'].shape == (6,)
+    # nanargmax takes the first maximum in flat order, which is chain 0 draw 1
+    assert soln['g_lm'] == pytest.approx(np.full(6, 1.0))
+    assert soln['g_mean'] == pytest.approx(1.0)
+
+
+def test_get_map_soln_preserves_free_parameter_shapes():
+    """The MAP is fed back to pm.sample as initvals, which type checks against
+    the model's declared shapes. Collapsing a shape (1,) site to a Python float
+    makes every resumed run fail with a pytensor conversion error."""
+    lp = np.array([[-101.0, -100.0, -102.0], [-103.0, -104.0, -105.0]])
+    soln, _ = util.get_map_soln(_trace(lp))
+    assert soln['t0'].shape == (1,)
+    assert soln['g_weights'].shape == (1,)
+    assert np.shape(soln['g_mean']) == ()
+
+
+def test_get_map_soln_squeezes_derived_quantities():
+    """Derived arrays are consumed as flat vectors, so a single planet's light
+    curves must come back (n,) and not (n, 1)."""
+    lp = np.array([[-101.0, -100.0, -102.0], [-103.0, -104.0, -105.0]])
+    soln, _ = util.get_map_soln(_trace(lp))
+    assert soln['g_light_curves'].shape == (6,)
+
+
+def test_get_map_soln_returns_the_best_log_probability():
+    lp = np.array([[-101.0, -100.0, -102.0], [-103.0, -104.0, -105.0]])
+    _, max_logp = util.get_map_soln(_trace(lp))
+    assert max_logp == pytest.approx(-100.0)
+
+
+def test_get_map_soln_ignores_nan_log_probabilities():
+    """A divergent draw can record lp as nan, and a plain max then returns nan
+    and selects that draw as the best sample."""
+    lp = np.array([[-101.0, np.nan, -102.0], [-100.0, -103.0, -104.0]])
+    soln, max_logp = util.get_map_soln(_trace(lp))
+    assert max_logp == pytest.approx(-100.0)
+    assert soln['g_mean'] == pytest.approx(3.0)
 
 
 # ---------------------------------------------------------------- sys model

@@ -72,3 +72,4 @@ All outputs are saved to the `out/` directory (or custom `--outdir`):
 | `*-cor.csv` | Corrected (detrended) light curves |
 | `timer-fit.log` | Full log file |
 | `fit.yaml`, `sys.yaml` | Copies of input configuration |
+| `cache.json` | Records which config and data each cached artifact was produced from |
