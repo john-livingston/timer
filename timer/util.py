@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import pandas as pd
 from astropy.time import Time
@@ -20,13 +22,25 @@ def get_spline_basis(x, degree=3, knots=None, n_knots=5, include_intercept=False
         spline_dm = np.asarray(dmatrix(dm_formula, {"x": x}))
     return spline_dm
 
-def get_residuals(name, y, soln, mask=None, use_gp=False):
+def get_sys_model(name, soln, npoints):
+    """Sum of every non-transit model component present in soln.
+
+    Components are the mean flux, the linear (systematics) model, the flare
+    and bump models, and the GP conditional mean. A component absent from
+    soln contributes zero, so this is safe for any model configuration.
+    """
+    sys_mod = np.zeros(npoints)
+    for key in (f'{name}_mean', f'{name}_lm', f'{name}_flare',
+                f'{name}_bump', f'{name}_gp_pred'):
+        if key in soln:
+            sys_mod = sys_mod + np.asarray(soln[key]).squeeze().flatten()
+    return sys_mod
+
+def get_residuals(name, y, soln, mask=None):
 
     if mask is None:
         mask = np.ones(len(y), dtype=bool)
 
-    mean = soln[f"{name}_mean"]
-    lin_mod = soln[f'{name}_lm'] if f'{name}_lm' in soln.keys() else np.zeros(mask.sum())
     tra_mod = soln[f"{name}_light_curves"]
     # Sum over planets axis if multiple planets
     if tra_mod.ndim > 1:
@@ -36,14 +50,7 @@ def get_residuals(name, y, soln, mask=None, use_gp=False):
     if len(tra_mod) == len(y):
         tra_mod = tra_mod[mask]
 
-    # Add flare and bump components if they exist
-    flare_mod = soln[f"{name}_flare"] if f"{name}_flare" in soln.keys() else 0
-    bump_mod = soln[f"{name}_bump"] if f"{name}_bump" in soln.keys() else 0
-
-    sys_mod = lin_mod + mean + flare_mod + bump_mod
-    if use_gp:
-        gp_mod = soln[f"{name}_gp_pred"]
-        sys_mod += gp_mod
+    sys_mod = get_sys_model(name, soln, int(mask.sum()))
 
     return y[mask] - tra_mod - sys_mod
 
@@ -65,8 +72,8 @@ def get_map_soln(trace):
 def get_var_names(data, bands, fit_basis, use_gp, fixed,
                   chromatic=False, log_sigma=True, weights=False, gp_config=None):
 
-    var_names = ['t0']
-    for par in 'period b dur'.split():
+    var_names = []
+    for par in 't0 period b dur'.split():
         if par not in fixed:
             var_names += [par]
     if 'ror' not in fixed:
@@ -106,8 +113,10 @@ def get_summary(trace, data, bands, fit_basis, use_gp, fixed,
 
 def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, include_bump=False, fp=None):
     lcs = map_soln[f"{name}_light_curves"]
+    # the mean is only a model site when include_mean=True
+    mean = map_soln[f"{name}_mean"] if f"{name}_mean" in map_soln else 0.0
     mod = (
-        + map_soln[f"{name}_mean"]
+        + mean
         + (np.sum(lcs, axis=-1) if lcs.ndim > 1 else lcs)
     )
     if f"{name}_lm" in map_soln.keys():
@@ -127,6 +136,21 @@ def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, 
 
     return mask
 
+# Sloan filters, which claret's tables distinguish from the Stromgren filters
+# of the same letter by a trailing asterisk
+SLOAN_BANDS = frozenset(['g', 'r', 'i', 'z'])
+
+
+def claret_band(band):
+    """The claret table name for a filter name.
+
+    Membership has to be exact. `band in 'griz'` is a substring test, so it
+    also matches 'gr', 'ri', 'iz' and '', appending an asterisk and asking
+    claret for a band it does not have.
+    """
+    return f'{band}*' if band in SLOAN_BANDS else band
+
+
 def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, uniform={}):
 
     priors = {}
@@ -144,7 +168,7 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
     else:
         raise ValueError(f"fit_basis={fit_basis} not supported")
 
-    bands_ = [f'{band}*' if band in 'griz' else band for band in bands]
+    bands_ = [claret_band(band) for band in bands]
     ldp = [ld.claret(band, *star['teff'], *star['logg'], *star['feh']) for band in bands_]
     priors['u_star'] = {band:ld[::2] for band,ld in zip(bands, ldp)}
     priors['u_star_unc'] = {band:ld[1::2] for band,ld in zip(bands, ldp)}
@@ -249,7 +273,14 @@ def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
         ic = 2 * nparams - 2 * max_logp
     elif method == 'AICc':
         ic = 2 * nparams - 2 * max_logp
-        ic += 2 * (nparams**2 + nparams) / (ndata - nparams - 1)
+        denom = ndata - nparams - 1
+        if denom <= 0:
+            logging.warning(
+                f'AICc is undefined for nparams={nparams} and ndata={ndata}: '
+                f'the correction denominator is {denom}; returning nan'
+            )
+            return float('nan')
+        ic += 2 * (nparams**2 + nparams) / denom
 
     if verbose:
         print('Number of datapoints: {}'.format(ndata))
@@ -259,9 +290,8 @@ def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
 
     return float(ic)
 
-def get_corrected(data, name, soln, nplanets, 
-                  mask=None, trace=None, use_gp=False, median=True, subtract_tc=True):
-    
+def get_corrected(data, name, soln, nplanets, mask=None, subtract_tc=True):
+
     if subtract_tc:
         offset = soln['t0']
         if nplanets > 1:
@@ -276,29 +306,12 @@ def get_corrected(data, name, soln, nplanets,
     if mask is None:
         mask = np.ones(len(x), dtype=bool)
 
-    if trace is None or not median:
-        if f'{name}_mean' in soln.keys():
-            mean = soln[f"{name}_mean"]
-        else:
-            mean = 0
-        lcjit = np.exp(soln[f'{name}_log_sigma_lc'])
-        lin_mod = soln[f'{name}_lm']
-        lcs = soln[f"{name}_light_curves"]
-        lcs_hr = soln[f"{name}_light_curves_hr"]
-        tra_mod = np.sum(lcs, axis=-1) if lcs.ndim > 1 else lcs
-        tra_mod_hr = np.sum(lcs_hr, axis=-1) if lcs_hr.ndim > 1 else lcs_hr
-    else:
-        if f'{name}_mean' in soln.keys():
-            mean = np.median(trace[f"{name}_mean"])
-        else:
-            mean = 0
-        lcjit = np.exp(np.median(trace[f'{name}_log_sigma_lc']))
-        lin_mod = np.median(trace[f'{name}_lm'], axis=0)
-        tra_mod = np.sum(np.median(trace[f"{name}_light_curves"], axis=0), axis=1)
-        tra_mod_hr = np.sum(np.median(trace[f"{name}_light_curves_hr"], axis=0), axis=1)
-    
-    sys_mod = lin_mod.flatten() + mean
-    
+    lcs_hr = soln[f"{name}_light_curves_hr"]
+    tra_mod_hr = np.sum(lcs_hr, axis=-1) if lcs_hr.ndim > 1 else lcs_hr
+
+    # subtract every non-transit component, not just the linear model
+    sys_mod = get_sys_model(name, soln, int(mask.sum()))
+
     cor = dict(
         x=x[mask]-offset, 
         y=y[mask]-sys_mod,
