@@ -7,7 +7,7 @@ name = "timer"
 version = "0.2.1"
 description = "Transit fitting analysis package"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 authors = [
     {name = "John Livingston", email = "john.livingston@nao.ac.jp"},
 ]
@@ -17,9 +17,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -32,13 +29,24 @@ dependencies = [
     "patsy",
     "exoplanet",
     "exoplanet-core",
-    "celerite2",
+    # celerite2 0.3.3 added an unconditional
+    # `from pytensor.link.jax.dispatch import jax_funcify` to its pymc backend,
+    # so importing celerite2.pymc drags in jax. All that buys is compiling a
+    # pymc model with the jax backend, which this package never does.
+    "celerite2<0.3.3",
+    # celerite2 0.3.2's pymc backend imports pkg_resources, which setuptools 81
+    # deprecated and 83 removed, and which Python 3.12 and later do not
+    # preinstall at all. Goes away with celerite2 0.3.3, which switched to
+    # importlib.resources, but that release wants jax.
+    "setuptools<81",
     "dill",
     "corner",
     "numpy",
     "pandas",
     "matplotlib",
-    "arviz",
+    # arviz 1.x replaced InferenceData with DataTree, which changes the
+    # posterior/sample_stats access this package relies on
+    "arviz<1.0",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +54,14 @@ dev = [
     "pytest",
     "black",
     "flake8",
+]
+test = [
+    "pytest",
+]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "pymdown-extensions",
 ]
 
 [project.scripts]
@@ -62,3 +78,8 @@ include = ["timer*"]
 
 [tool.setuptools.package-data]
 timer = ["*.yaml", "*.yml"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: end to end runs that build a model and sample",
+]

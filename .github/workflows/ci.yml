@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor. pymc still supports 3.10, but 3.10 only resolves
+        # by pulling the whole scientific stack back a generation (numpy 2.2,
+        # pytensor 2.31) which nobody here runs. Development happens on 3.13.
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # limbdark is not on PyPI, so it comes from git exactly as
+      # docs/installation.md instructs. celerite2 comes from PyPI, unlike in
+      # timex, because the pinned release's pymc backend works as published.
+      - name: Install git only dependencies
+        run: pip install "git+https://github.com/john-livingston/limbdark"
+
+      - run: pip install -e '.[test]'
+
+      # the full suite, including the slow tests that run real fits. Those are
+      # the ones that catch resume and GP path regressions, so they are worth
+      # the few minutes.
+      - run: pytest -q
+
+  docs:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      # the site uses no mkdocstrings and no plugins, so it never imports
+      # timer. Installing only the documentation toolchain skips the whole
+      # pymc dependency tree that the test job pays for. Keep this list in
+      # step with the docs extra in pyproject.toml, which exists for building
+      # the site locally.
+      - name: Install documentation toolchain
+        run: pip install mkdocs mkdocs-material pymdown-extensions
+
+      - name: Build the site strictly
+        run: mkdocs build --strict
+
+      - name: Deploy to gh-pages
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdocs gh-deploy --force
