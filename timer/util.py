@@ -280,6 +280,12 @@ def bin_df(df, timecol='time', errcol='flux_err', binsize=60/86400., kind='media
     df_binned[errcol] = yerr_binned
     return df_binned.dropna()
 
+# The GP hyperparameter sites model.build creates, shared or per dataset.
+# Deliberately not the bare 'gp_log_' prefix: a dataset named 'gp' has a
+# jitter site called gp_log_sigma_lc, which that would swallow.
+GP_HYPERPARAM_PREFIXES = ('gp_log_amp', 'gp_log_scale')
+
+
 def count_free_params(model, prefix=None):
     """Number of free parameters in a PyMC model.
 
@@ -289,9 +295,9 @@ def count_free_params(model, prefix=None):
     PyMC keeps them in separate collections. That is why this counts the
     model rather than the MAP solution dict, which mixes the two.
 
-    Pass `prefix` to count only the parameters whose site name starts with it,
-    which is how the GP's own hyperparameters are counted for the effective
-    degrees of freedom correction.
+    Pass `prefix` (a string or a tuple of them) to count only the parameters
+    whose site name starts with it, which is how the GP's own hyperparameters
+    are counted for the effective degrees of freedom correction.
     """
     return sum(int(rv.size.eval()) for rv in model.free_RVs
                if prefix is None or rv.name.startswith(prefix))
@@ -313,6 +319,9 @@ def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
             )
             return float('nan')
         ic += 2 * (nparams**2 + nparams) / denom
+    else:
+        raise ValueError(
+            f"method must be one of 'BIC', 'AIC' or 'AICc', got {method!r}")
 
     if verbose:
         print('Number of datapoints: {}'.format(ndata))
