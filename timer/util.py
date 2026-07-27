@@ -265,6 +265,18 @@ def bin_df(df, timecol='time', errcol='flux_err', binsize=60/86400., kind='media
     df_binned[errcol] = yerr_binned
     return df_binned.dropna()
 
+def count_free_params(model):
+    """Number of free parameters in a PyMC model.
+
+    PyMC's free_RVs is exactly the right set: deterministic sites (the light
+    curves, the linear model, the GP conditional mean) and the observed
+    likelihood are functions of the free parameters, not extra freedom, and
+    PyMC keeps them in separate collections. That is why this counts the
+    model rather than the MAP solution dict, which mixes the two.
+    """
+    return sum(int(rv.size.eval()) for rv in model.free_RVs)
+
+
 def compute_ic(map_soln, max_logp, nparams, ndata, method='BIC', verbose=True):
 
     if method == 'BIC':

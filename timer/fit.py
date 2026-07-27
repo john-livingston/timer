@@ -389,10 +389,23 @@ class TransitFit:
 
     def get_ic(self, ic='BIC', verbose=False):
         soln, max_logp = util.get_map_soln(self.trace)
-        nparams = sum([rv.dsize for rv in self.model.free_RVs])
-        ndata = sum([len(v['x']) for v in self.data.values()])
+        nparams = self._count_params()
+        ndata = self._count_data()
         return util.compute_ic(soln, max_logp, nparams, ndata, method=ic, verbose=verbose)
-        
+
+    def _count_params(self):
+        """Free parameters in the model, excluding deterministics and observed."""
+        return util.count_free_params(self.model)
+
+    def _count_data(self):
+        """Points that entered the likelihood, excluding clipped outliers."""
+        total = 0
+        for name, data in self.data.items():
+            mask = self.masks.get(name)
+            total += len(data['x']) if mask is None else int(np.sum(mask))
+        return total
+
+
     def plot_systematics(self, name, style=2, fn=None):
 
         fig = plot.systematics(self, name, style=style)
@@ -692,8 +705,8 @@ class TransitFit:
                 f.write(f'{self.planets[0]} {t0_s.mean() + self.ref_time} {t0_s.std()}\n')
         with open(os.path.join(self.outdir, 'ic.txt'), 'w') as f:
             soln, max_logp = util.get_map_soln(self.trace)
-            nparams = sum([rv.size.eval() for rv in self.model.free_RVs])
-            ndata = sum([len(v['x']) for v in self.data.values()])
+            nparams = self._count_params()
+            ndata = self._count_data()
             ics = 'BIC AIC AICc'.split()
             for ic in ics:
                 val = util.compute_ic(soln, max_logp, nparams, ndata, method=ic, verbose=False)
