@@ -166,8 +166,12 @@ def test_the_corrected_light_curve_keeps_the_transit(gp_run):
     # baseline sits at 1 and the errors are the per point errors scaled to
     # match. A difference of means cannot see either, so assert them here.
     assert cor.y.values[out_of_transit].mean() == pytest.approx(1.0, abs=2e-3)
-    assert cor.yerr.values == pytest.approx(
-        tf.data['g']['yerr'] * 1e-3, rel=1e-9)
+    # errors are the ones the likelihood used, photometric plus fitted jitter,
+    # converted from ppt to relative flux
+    jitter = np.exp(np.squeeze(tf.map_soln['g_log_sigma_lc']))
+    expected = np.sqrt(tf.data['g']['yerr']**2 + jitter**2) * 1e-3
+    assert cor.yerr.values == pytest.approx(expected, rel=1e-9)
+    assert (cor.yerr.values > tf.data['g']['yerr'] * 1e-3).all()
 
 
 def test_systematics_panels_slice_the_real_design_matrix(gp_run):

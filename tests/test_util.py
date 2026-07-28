@@ -1,5 +1,6 @@
 import arviz as az
 import numpy as np
+import pandas as pd
 import pytest
 
 from timer import util
@@ -131,6 +132,40 @@ def test_get_corrected_applies_the_mask_to_the_data_only():
     assert cor['x'] == pytest.approx(kept)
 
 
+def test_get_corrected_reports_errors_including_the_fitted_jitter():
+    """The published errors have to be the ones the fit actually used.
+
+    The likelihood weights each point by sqrt(yerr^2 + exp(2*log_sigma_lc)),
+    and the plots draw that too, but *-cor.csv carried the bare photometric
+    error. On a real fit the jitter exceeded the photometric error, so the
+    published bars understated the scatter by nearly a factor of two.
+
+    Hand derived: yerr 0.01 with log_sigma_lc = ln(0.02) gives
+    sqrt(0.01^2 + 0.02^2) = 0.02236068.
+    """
+    n = 8
+    data = dict(x=np.arange(n, dtype=float), y=np.zeros(n),
+                yerr=np.full(n, 0.01), x_hr=np.linspace(0, 7, 500))
+    soln = _soln_with_every_component(n)
+    soln['g_log_sigma_lc'] = np.array(np.log(0.02))
+
+    cor = util.get_corrected(data, 'g', soln, 1, subtract_tc=False)
+
+    assert cor['yerr'] == pytest.approx(np.full(n, np.sqrt(0.01**2 + 0.02**2)))
+
+
+def test_get_corrected_errors_are_the_photometric_ones_without_a_jitter_site():
+    """A model with no jitter term must not have one invented for it."""
+    n = 8
+    data = dict(x=np.arange(n, dtype=float), y=np.zeros(n),
+                yerr=np.full(n, 0.01), x_hr=np.linspace(0, 7, 500))
+    soln = _soln_with_every_component(n)
+
+    cor = util.get_corrected(data, 'g', soln, 1, subtract_tc=False)
+
+    assert cor['yerr'] == pytest.approx(np.full(n, 0.01))
+
+
 def test_get_corrected_subtracts_the_transit_time():
     """subtract_tc recenters the output on t0, which is what the plots expect."""
     n = 8
@@ -214,6 +249,79 @@ def test_format_tc_lines_keeps_planets_and_their_samples_paired():
     lines = util.format_tc_lines(['b', 'c'], 2460000.0, t0_samples=samples)
     assert [line.split()[:2] for line in lines] == \
         [['b', '2460000.5'], ['c', '2460001.2']]
+
+
+# ---------------------------------------------------------------- binning
+
+def _binning_fixture(n_per_bin=10, n_bins=4000, sigma=1e-3, seed=3):
+    """Pure Gaussian noise in equal sized bins, enough of them that the
+    scatter of the binned values estimates the true uncertainty to ~1%.
+
+    Times are placed deterministically inside each unit bin so that every
+    group holds exactly n_per_bin points: with jittered times np.digitize
+    splits the first bin and the sqrt(N) assertion below reads a short group.
+    """
+    rng = np.random.default_rng(seed)
+    n = n_bins * n_per_bin
+    offsets = np.linspace(0.1, 0.4, n_per_bin)
+    t = (np.repeat(np.arange(n_bins), n_per_bin) + np.tile(offsets, n_bins))
+    return pd.DataFrame({'time': t,
+                         'flux': 1.0 + rng.normal(0, sigma, n),
+                         'fluxerr': np.full(n, sigma)})
+
+
+def test_median_binned_errors_are_not_optimistic():
+    """The reported uncertainty has to describe the values actually produced.
+
+    Without the sqrt(pi/2) factor this ratio is 1.23: the errors in *-cor.csv
+    are 23% optimistic and the likelihood is given weights it has not earned.
+    With it the ratio lands slightly below 1 (0.94 at 10 points per bin,
+    because sqrt(pi/2) is asymptotic and even N is less noisy), so the errors
+    are mildly conservative instead.
+    """
+    binned = util.bin_df(_binning_fixture(), 'time', 'fluxerr',
+                         binsize=1.0, kind='median')
+    ratio = binned.flux.std() / binned.fluxerr.iloc[0]
+    assert 0.90 < ratio <= 1.02
+
+
+def test_mean_binned_errors_match_the_scatter_of_the_binned_flux():
+    """The control: the mean's standard error is median(err)/sqrt(N) exactly,
+    so this branch must not gain the correction factor."""
+    binned = util.bin_df(_binning_fixture(), 'time', 'fluxerr',
+                         binsize=1.0, kind='mean')
+    assert binned.flux.std() / binned.fluxerr.iloc[0] == pytest.approx(1.0, abs=0.05)
+
+
+def test_median_binned_errors_are_larger_than_mean_binned_ones():
+    """Pins the direction and the size of the correction, so dropping it or
+    applying it to the wrong branch both fail."""
+    kwargs = dict(timecol='time', errcol='fluxerr', binsize=1.0)
+    med = util.bin_df(_binning_fixture(), kind='median', **kwargs)
+    mean = util.bin_df(_binning_fixture(), kind='mean', **kwargs)
+    assert med.fluxerr.iloc[0] / mean.fluxerr.iloc[0] == pytest.approx(
+        np.sqrt(np.pi / 2), rel=1e-9)
+
+
+@pytest.mark.parametrize('n_per_bin', [4, 16])
+def test_binned_errors_shrink_as_the_square_root_of_the_bin_size(n_per_bin):
+    """N points per bin must give sigma/sqrt(N), not sigma or sigma/N.
+    Hand derived: sqrt(pi/2) * 1e-3 / sqrt(N)."""
+    kwargs = dict(timecol='time', errcol='fluxerr', binsize=1.0, kind='median')
+    binned = util.bin_df(_binning_fixture(n_per_bin=n_per_bin, n_bins=50), **kwargs)
+    expected = np.sqrt(np.pi / 2) * 1e-3 / np.sqrt(n_per_bin)
+    assert binned.fluxerr.iloc[0] == pytest.approx(expected, rel=1e-9)
+
+
+def test_median_binning_ignores_a_single_bad_frame():
+    """Why the default is the median: one ruined frame in a bin moves the mean
+    by most of a sigma and leaves the median alone. Binning happens at read
+    time, before any outlier clipping can help."""
+    df = _binning_fixture(n_per_bin=10, n_bins=1, sigma=1e-3, seed=5)
+    df.loc[0, 'flux'] = 1.5
+    kwargs = dict(timecol='time', errcol='fluxerr', binsize=1.0)
+    assert abs(util.bin_df(df, kind='median', **kwargs).flux.iloc[0] - 1.0) < 1e-3
+    assert abs(util.bin_df(df, kind='mean', **kwargs).flux.iloc[0] - 1.0) > 0.04
 
 
 # ------------------------------------------------------------- claret bands

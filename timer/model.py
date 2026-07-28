@@ -1,6 +1,7 @@
 import numpy as np
 import exoplanet as xo
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 import logging
 from . import optim
@@ -612,6 +613,59 @@ def build(
         map_soln = _add_gp_predictions(map_soln, datasets, masks, gp_config)
 
     return model, map_soln
+
+
+def max_log_likelihood(model, posterior):
+    """Largest observed-data log likelihood among the posterior draws.
+
+    BIC and AIC are defined with the maximized likelihood. PyMC's
+    sample_stats['lp'] is the joint log density in the unconstrained space, so
+    it also carries every prior term and the transform Jacobian. Using it
+    charges each systematics column the log density of its own weight prior on
+    top of the intended nparams*log(ndata): with the sigma=1e3 prior in build()
+    that is about 15.7 per column against a legitimate 4.1, and it moves if the
+    prior width is changed. A criterion that depends on how uninformative a
+    prior was made cannot be used to choose a detrending model.
+
+    The GP branch declares its likelihood with pm.Potential, which arviz's
+    log_likelihood group does not capture, so the factors are taken from the
+    model itself.
+    """
+    factors = model.observed_RVs + model.potentials
+    loglike = model.compile_fn(model.logp(vars=factors, sum=True))
+
+    # each transform's forward map is compiled once: rebuilding the graph per
+    # draw costs seconds per draw rather than microseconds
+    forward = {}
+    for rv in model.free_RVs:
+        transform = model.rvs_to_transforms.get(rv)
+        if transform is None:
+            continue
+        v = pt.tensor(dtype='float64', shape=rv.type.shape, name='v')
+        forward[rv.name] = pytensor.function(
+            [v], transform.forward(v, *rv.owner.inputs), on_unused_input='ignore')
+
+    value_names = {rv.name: model.rvs_to_values[rv].name for rv in model.free_RVs}
+    draws = {rv.name: np.asarray(posterior[rv.name].values) for rv in model.free_RVs}
+    nchain, ndraw = posterior.sizes['chain'], posterior.sizes['draw']
+
+    out = np.full((nchain, ndraw), np.nan)
+    for c in range(nchain):
+        for d in range(ndraw):
+            point = {}
+            for rv in model.free_RVs:
+                val = draws[rv.name][c, d]
+                fwd = forward.get(rv.name)
+                point[value_names[rv.name]] = np.asarray(
+                    fwd(val) if fwd is not None else val, dtype='float64')
+            out[c, d] = loglike(point)
+
+    if not np.any(np.isfinite(out)):
+        raise ValueError(
+            'no posterior draw has a finite log likelihood, so no information '
+            'criterion can be computed'
+        )
+    return float(np.nanmax(out))
 
 
 def _build_gp(map_soln, name, x, yerr, gp_config):
