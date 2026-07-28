@@ -566,6 +566,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Outputs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-ictxt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading ic.txt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reading-corcsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading *-cor.csv
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -705,6 +733,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Outputs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-ictxt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading ic.txt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reading-corcsv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading *-cor.csv
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -816,7 +872,7 @@
 </tr>
 <tr>
 <td><code>ic.txt</code></td>
-<td>Information criteria (BIC, AIC, AICc)</td>
+<td>Information criteria (BIC, AIC, AICc), and for GP fits their effective degrees of freedom corrected counterparts</td>
 </tr>
 <tr>
 <td><code>posterior_samples.csv.gz</code></td>
@@ -840,6 +896,26 @@
 </tr>
 </tbody>
 </table>
+<h3 id="reading-ictxt">Reading ic.txt<a class="headerlink" href="#reading-ictxt" title="Permanent link">&para;</a></h3>
+<p>The criteria are built from the maximum observed-data log likelihood over the
+posterior draws, so the penalty is <code>nparams * log(ndata)</code> and nothing else. In
+particular they do not include the prior terms: a criterion that did would
+charge each systematics column the log density of its own weight prior, about
+four times the intended penalty, and would move if that prior were widened.</p>
+<p>Values written before this change are not comparable with values written after
+it. Recompute rather than mixing them.</p>
+<p>For GP fits, <code>edf</code> is the number of degrees of freedom the GP smoother actually
+absorbs, typically far more than its two or three hyperparameters, and the
+<code>*_edf</code> rows repeat each criterion with that substituted. Treat <code>nparams_edf</code>
+as an upper bound: it does not subtract the overlap between the GP and the
+linear systematics model, so a fit with a wide design matrix is charged for
+some flexibility twice.</p>
+<h3 id="reading-corcsv">Reading *-cor.csv<a class="headerlink" href="#reading-corcsv" title="Permanent link">&para;</a></h3>
+<p><code>yerr</code> is the uncertainty the likelihood used, the photometric error and the
+fitted jitter added in quadrature, not the bare photometric error. Where a
+light curve was binned with the default <code>kind='median'</code>, the binned error also
+carries the <code>sqrt(pi/2)</code> factor that the median of a sample costs over its
+mean.</p>
 
 
 
