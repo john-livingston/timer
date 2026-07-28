@@ -56,6 +56,27 @@ def test_the_pipeline_produces_every_documented_output(plain_run):
         assert os.path.exists(os.path.join(out, fn)), fn
 
 
+def test_summary_reports_every_sampled_parameter(plain_run):
+    """summary.csv is the headline table, and get_var_names decides its rows.
+
+    Asserting the file exists cannot see a dropped row: removing the jitter or
+    the GP hyperparameters from get_var_names silently shrinks the table.
+    """
+    wd, _ = plain_run
+    index = set(pd.read_csv(os.path.join(wd, 'out', 'summary.csv'),
+                            index_col=0).index)
+    # period and u_star are fixed in the fixture, so they must be absent
+    assert {'t0[0]', 'ror[0]', 'b[0]', 'dur[0]', 'g_log_sigma_lc'} <= index
+    assert not any(name.startswith('period') for name in index)
+
+
+def test_summary_reports_the_gp_hyperparameters(gp_run):
+    wd, _ = gp_run
+    index = set(pd.read_csv(os.path.join(wd, 'out', 'summary.csv'),
+                            index_col=0).index)
+    assert {'gp_log_amp', 'gp_log_scale'} <= index
+
+
 def test_every_resume_artifact_is_recorded_in_the_manifest(plain_run):
     """Otherwise the next run silently recomputes everything, which looks like
     the cache working rather than like the cache never being written."""
@@ -134,13 +155,19 @@ def test_the_corrected_light_curve_keeps_the_transit(gp_run):
     the transit is still there at roughly its injected depth: subtracting the
     light curve along with the systematics would leave nothing at all.
     """
-    wd, _ = gp_run
+    wd, tf = gp_run
     cor = pd.read_csv(os.path.join(wd, 'out', 'gp-g-cor.csv'))
     x = cor.x.values
     in_transit = np.abs(x - 2460423.06) < 0.015
     out_of_transit = np.abs(x - 2460423.06) > 0.025
     depth = cor.y.values[out_of_transit].mean() - cor.y.values[in_transit].mean()
     assert 0.002 < depth < 0.010
+    # the file is in relative flux, not the ppt the model works in: the
+    # baseline sits at 1 and the errors are the per point errors scaled to
+    # match. A difference of means cannot see either, so assert them here.
+    assert cor.y.values[out_of_transit].mean() == pytest.approx(1.0, abs=2e-3)
+    assert cor.yerr.values == pytest.approx(
+        tf.data['g']['yerr'] * 1e-3, rel=1e-9)
 
 
 def test_systematics_panels_slice_the_real_design_matrix(gp_run):
