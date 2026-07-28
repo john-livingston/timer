@@ -269,15 +269,30 @@ def bin_df(df, timecol='time', errcol='flux_err', binsize=60/86400., kind='media
     errcol : name of column with measurement errors
     binsize : size of bins (same units as time column)
     kind : median of points in each bin if set to 'median', else mean
+
+    The median is the default because binning happens at read time, before any
+    outlier clipping, so a single ruined frame would otherwise pull its whole
+    bin. It is the noisier estimator, and the binned uncertainty is scaled
+    accordingly.
     """
     bins = np.arange(df[timecol].min(), df[timecol].max(), binsize)
     groups = df.groupby(np.digitize(df[timecol], bins))
     if kind == 'median':
         df_binned = groups.median()
+        # median(err)/sqrt(N) is the standard error of the *mean*, which
+        # understates a median-binned point by about 23%.
+        #
+        # sqrt(pi/2) is the asymptotic ratio; at finite N it overcorrects, and
+        # more so for even N, where the median averages the two middle order
+        # statistics and is therefore less noisy. Measured against the true
+        # ratio: N=4 1.15x, N=10 1.07x, N=9 1.02x, N=25 1.01x. So the binned
+        # errors come out slightly conservative rather than 23% optimistic,
+        # which is the right direction to be wrong in.
+        scale = np.sqrt(np.pi / 2)
     else:
         df_binned = groups.mean()
-    yerr_binned = groups.median()[errcol] / np.sqrt(groups.size())
-    df_binned[errcol] = yerr_binned
+        scale = 1.0
+    df_binned[errcol] = scale * groups.median()[errcol] / np.sqrt(groups.size())
     return df_binned.dropna()
 
 # The GP hyperparameter sites model.build creates, shared or per dataset.
@@ -374,10 +389,19 @@ def get_corrected(data, name, soln, nplanets, mask=None, subtract_tc=True):
     # subtract every non-transit component, not just the linear model
     sys_mod = get_sys_model(name, soln, int(mask.sum()))
 
+    # report the uncertainty the fit actually used: the likelihood weights by
+    # sqrt(yerr^2 + exp(2*log_sigma_lc)), and the fitted jitter routinely
+    # exceeds the photometric error, so the bare column understates the
+    # scatter of the very points it describes
+    yerr_total = yerr[mask]
+    if f'{name}_log_sigma_lc' in soln:
+        lcjit = np.exp(np.squeeze(soln[f'{name}_log_sigma_lc']))
+        yerr_total = np.sqrt(yerr_total**2 + lcjit**2)
+
     cor = dict(
-        x=x[mask]-offset, 
+        x=x[mask]-offset,
         y=y[mask]-sys_mod,
-        yerr=yerr[mask], 
+        yerr=yerr_total,
         x_hr=x_hr-offset, 
         tra_mod_hr=tra_mod_hr
     )

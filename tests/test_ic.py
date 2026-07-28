@@ -120,27 +120,65 @@ def test_count_data_counts_everything_when_nothing_is_clipped():
     assert fit._count_data() == 16
 
 
-@pytest.fixture
-def tiny_trace():
-    """A two chain, three draw trace whose best sample has lp = -100."""
-    lp = np.array([[-101.0, -100.0, -102.0], [-103.0, -104.0, -105.0]])
-    posterior = {'t0': np.full((2, 3), 0.5)}
-    return az.from_dict(posterior=posterior, sample_stats={'lp': lp})
+def _one_parameter_fit(prior_sigma, obs=np.zeros(4)):
+    """A model with one free parameter and a Normal likelihood, plus a trace.
 
-
-def test_get_ic_reports_bic_from_the_model_and_the_unmasked_points(
-        gp_shaped_model, tiny_trace):
-    """Exercises the whole ic.txt path: best log probability from the trace,
-    free parameter count from the model, sample size from the masks.
-
-    Hand derived with logp -100, nparams 13 and ndata 14:
-    -2*(-100) + 13*ln(14) = 200 + 34.30607... = 234.30607.
+    The draws are mu = 0.5 then mu = 0, so the best one is deliberately not
+    the first: taking draw zero rather than the maximum has to be visible.
     """
-    fit = _bare_fit(
-        data={'g': {'x': np.arange(10.)}, 'r': {'x': np.arange(6.)}},
-        masks={'g': np.array([True] * 8 + [False] * 2), 'r': None},
-    )
-    fit.model = gp_shaped_model
-    fit.trace = tiny_trace
+    with pm.Model() as model:
+        mu = pm.Normal('mu', 0.0, prior_sigma)
+        pm.Normal('obs', mu=mu, sigma=1.0, observed=obs)
+    draws = np.array([[0.5, 0.0]])
+    # real lp values, so that a criterion built on them genuinely moves with
+    # prior_sigma and the invariance test below can fail
+    logp = model.compile_logp()
+    trace = az.from_dict(
+        posterior={'mu': draws},
+        sample_stats={'lp': np.array([[float(logp({'mu': v})) for v in draws[0]]])})
+    fit = _bare_fit(data={'g': {'x': np.arange(4.)}}, masks={'g': None})
+    fit.model = model
+    fit.trace = trace
+    return fit
 
-    assert fit.get_ic(ic='BIC') == pytest.approx(200 + 13 * np.log(14))
+
+def test_bic_is_built_from_the_likelihood_not_the_log_posterior():
+    """BIC is defined with the maximized likelihood. PyMC's sample_stats['lp']
+    is the joint density in the unconstrained space, so it also carries every
+    prior term and the transform Jacobian.
+
+    Hand derived: 4 observations at 0 with sigma 1 and mu 0 give a log
+    likelihood of 4 * -0.5*ln(2*pi) = -3.67575413, so
+    BIC = -2*(-3.67575413) + 1*ln(4) = 7.35150827 + 1.38629436 = 8.73780262.
+    Using lp instead would add the mu prior, about +15.7 for sigma=1e3.
+    """
+    fit = _one_parameter_fit(prior_sigma=1e3)
+    assert fit.get_ic(ic='BIC') == pytest.approx(8.73780262, abs=1e-6)
+
+
+def test_the_information_criteria_do_not_move_with_the_prior_width():
+    """The property the fix exists for. The weight prior in model.build is
+    sigma=1e3, chosen to be uninformative; if it reaches the criteria then
+    widening it to 1e4 makes every model look worse by 4.6 per parameter, and
+    a detrending comparison is decided by a number nobody meant to set.
+    """
+    narrow = _one_parameter_fit(prior_sigma=1e3).get_ic(ic='BIC')
+    wide = _one_parameter_fit(prior_sigma=1e4).get_ic(ic='BIC')
+    assert narrow == pytest.approx(wide, abs=1e-9)
+
+
+def test_the_likelihood_is_maximized_over_the_draws():
+    """The best draw is the second one. Hand derived: at mu = 0.5 the log
+    likelihood is -3.67575413 - 4*0.125 = -4.17575413, so taking the first
+    draw, or any fixed one, would give BIC 9.73780262 instead of 8.73780262.
+    """
+    fit = _one_parameter_fit(prior_sigma=1e3)
+    assert fit.get_ic(ic='BIC') == pytest.approx(8.73780262, abs=1e-6)
+
+
+def test_get_ic_uses_the_masked_point_count_in_the_penalty(gp_shaped_model):
+    """The penalty is k*ln(n) over the points that entered the likelihood."""
+    fit = _one_parameter_fit(prior_sigma=1e3)
+    fit.masks = {'g': np.array([True, True, True, False])}
+    # nparams 1, ndata 3: -2*(-3.67575413) + ln(3)
+    assert fit.get_ic(ic='BIC') == pytest.approx(7.35150827 + np.log(3), abs=1e-6)

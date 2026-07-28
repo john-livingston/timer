@@ -67,9 +67,35 @@ All outputs are saved to the `out/` directory (or custom `--outdir`):
 | `trace.png` | MCMC trace plot |
 | `summary.csv` | Parameter summary statistics |
 | `tc.txt` | Fitted transit center times |
-| `ic.txt` | Information criteria (BIC, AIC, AICc) |
+| `ic.txt` | Information criteria (BIC, AIC, AICc), and for GP fits their effective degrees of freedom corrected counterparts |
 | `posterior_samples.csv.gz` | Full posterior samples |
 | `*-cor.csv` | Corrected (detrended) light curves |
 | `timer-fit.log` | Full log file |
 | `fit.yaml`, `sys.yaml` | Copies of input configuration |
 | `cache.json` | Records which config and data each cached artifact was produced from |
+
+### Reading ic.txt
+
+The criteria are built from the maximum observed-data log likelihood over the
+posterior draws, so the penalty is `nparams * log(ndata)` and nothing else. In
+particular they do not include the prior terms: a criterion that did would
+charge each systematics column the log density of its own weight prior, about
+four times the intended penalty, and would move if that prior were widened.
+
+Values written before this change are not comparable with values written after
+it. Recompute rather than mixing them.
+
+For GP fits, `edf` is the number of degrees of freedom the GP smoother actually
+absorbs, typically far more than its two or three hyperparameters, and the
+`*_edf` rows repeat each criterion with that substituted. Treat `nparams_edf`
+as an upper bound: it does not subtract the overlap between the GP and the
+linear systematics model, so a fit with a wide design matrix is charged for
+some flexibility twice.
+
+### Reading *-cor.csv
+
+`yerr` is the uncertainty the likelihood used, the photometric error and the
+fitted jitter added in quadrature, not the bare photometric error. Where a
+light curve was binned with the default `kind='median'`, the binned error also
+carries the `sqrt(pi/2)` factor that the median of a sample costs over its
+mean.

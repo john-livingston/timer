@@ -171,6 +171,7 @@ def _fit_for_save_results(tmp_path, use_gp, monkeypatch, nparams=13, ndata=50):
         sample_stats={'lp': np.array([[-101.0, -100.0, -102.0, -103.0]])})
 
     monkeypatch.setattr(fit.util, 'get_map_soln', lambda trace: ({}, -100.0))
+    monkeypatch.setattr(fit.TransitFit, '_max_loglike', lambda self: -100.0)
     monkeypatch.setattr(fit.TransitFit, '_count_params', lambda self: nparams)
     monkeypatch.setattr(fit.TransitFit, '_count_data', lambda self: ndata)
     monkeypatch.setattr(fit.TransitFit, '_count_gp_hyperparams', lambda self: 2)
