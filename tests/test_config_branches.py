@@ -135,8 +135,12 @@ def test_the_flare_is_removed_from_the_corrected_light_curve(flare_run):
     baseline = cor.x.values < tpeak - 0.03
 
     assert at_peak.sum() and baseline.sum(), 'fixture must span both regions'
+    # the fixture samples five draws, so the recovered flare parameters are
+    # rough and a residual of order 1e-3 survives. Measured over repeated
+    # runs: 1.44e-3, 1.51e-3, 1.76e-3. Leaving the flare in shifts this by
+    # the injected 6 ppt, so 3e-3 separates the two comfortably.
     assert cor.y.values[at_peak].mean() == pytest.approx(
-        cor.y.values[baseline].mean(), abs=1.5e-3)
+        cor.y.values[baseline].mean(), abs=3e-3)
 
 
 # ------------------------------------------------------------------- bump
@@ -184,8 +188,10 @@ def test_the_bump_is_removed_from_the_corrected_light_curve(bump_run):
                       (np.abs(cor.x.values - tcenter) > 0.008)
 
     assert at_bump.sum() and in_transit_away.sum()
+    # measured over repeated runs: 5.3e-4, 8.3e-4, 1.05e-3. Leaving the
+    # bump in shifts this by the injected 5 ppt.
     assert cor.y.values[at_bump].mean() == pytest.approx(
-        cor.y.values[in_transit_away].mean(), abs=1e-3)
+        cor.y.values[in_transit_away].mean(), abs=2.5e-3)
 
 
 # -------------------------------------------------------------- chromatic
