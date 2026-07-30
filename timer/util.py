@@ -126,7 +126,8 @@ def get_summary(trace, data, bands, fit_basis, use_gp, fixed,
     )
     return summary
 
-def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, include_bump=False, fp=None):
+def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=5, include_flare=False, include_bump=False, fp=None):
+    """Mask of points to keep; nsig is a clipping threshold in sigma units."""
     lcs = map_soln[f"{name}_light_curves"]
     # the mean is only a model site when include_mean=True
     mean = map_soln[f"{name}_mean"] if f"{name}_mean" in map_soln else 0.0
@@ -143,8 +144,12 @@ def get_outlier_mask(x, y, name, map_soln, use_gp, nsig=7, include_flare=False, 
     if include_bump:
         mod += map_soln[f'{name}_bump']
     resid = y - mod
-    rms = np.sqrt(np.median(resid**2))
-    mask = np.abs(resid) < nsig * rms
+    # sqrt(median(resid**2)) is median(|resid|), which is 0.6745 sigma for
+    # Gaussian residuals, so scale it to make nsig a threshold in sigma. The
+    # residuals are zero mean by construction when the model fits, so this is
+    # the MAD estimator without the redundant recentering.
+    sigma = 1.4826 * np.sqrt(np.median(resid**2))
+    mask = np.abs(resid) < nsig * sigma
 
     if fp is not None and mask.sum() < mask.size:
         plot_outliers(x, resid, mask, fp=fp)

@@ -45,7 +45,7 @@ defaults = dict(
         trim_beg = None,
         trim_end = None,
         clip = False,
-        clip_nsig = 7,
+        clip_nsig = 5,
         binsize = 5/1440,
         chunk_offset = False,
         chunk_thresh = 0.02, # gap in days above which a new offset column starts
@@ -585,7 +585,7 @@ class TransitFit:
                 if self.clobber or self.masks[name] is None:
                     x, y = [data.get(i) for i in 'x y'.split()]
                     map_soln, use_gp = self.map_soln, self.use_gp
-                    clip_nsig = self.fit_params['data'][name].get('clip_nsig', 7)
+                    clip_nsig = self.fit_params['data'][name].get('clip_nsig', 5)
                     if fn is None:
                         current_fn = f'{name}-outliers.png'
                     else:

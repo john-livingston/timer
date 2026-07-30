@@ -46,7 +46,7 @@ Each dataset is listed under `data:` with a user-chosen key. Multiple datasets c
 | `trim_beg` | Trim data within this many days of the start | `null` |
 | `trim_end` | Trim data within this many days of the end | `null` |
 | `clip`    | Enable sigma-clipping of outliers | `false` |
-| `clip_nsig` | Sigma threshold for outlier clipping | `7` |
+| `clip_nsig` | Sigma threshold for outlier clipping | `5` |
 | `chunk_offset` | Add offset columns for data gaps | `false` |
 | `chunk_thresh` | Gap threshold in days for chunk detection | `0` |
 
