@@ -616,7 +616,14 @@ def build(
 
 
 def max_log_likelihood(model, posterior):
-    """Largest observed-data log likelihood among the posterior draws.
+    """Largest observed-data log likelihood among the posterior draws, and the
+    (chain, draw) it came from.
+
+    The index matters because any penalty paired with this likelihood has to
+    describe the same parameter vector. The GP's effective degrees of freedom
+    varies by tens of units across a posterior and correlates with the
+    likelihood, so reading it from the maximum posterior draw instead would
+    systematically under-penalize the GP.
 
     BIC and AIC are defined with the maximized likelihood. PyMC's
     sample_stats['lp'] is the joint log density in the unconstrained space, so
@@ -665,7 +672,8 @@ def max_log_likelihood(model, posterior):
             'no posterior draw has a finite log likelihood, so no information '
             'criterion can be computed'
         )
-    return float(np.nanmax(out))
+    chain, draw = np.unravel_index(np.nanargmax(out), out.shape)
+    return float(out[chain, draw]), (int(chain), int(draw))
 
 
 def _build_gp(map_soln, name, x, yerr, gp_config):

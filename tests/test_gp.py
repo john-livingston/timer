@@ -342,18 +342,107 @@ def _fit_for_save_results(tmp_path, use_gp, monkeypatch, nparams=13, ndata=50):
     tf.data = _dataset(n=20)
     tf.masks = {'g': None}
     tf.map_soln = _soln(log_amp=0.0, log_scale=-2.0)
+    # the GP hyperparameters have to be in the posterior, since the edf is now
+    # read at the likelihood maximizing draw rather than from map_soln. Every
+    # draw carries the same values as map_soln so the expectations stay simple.
     tf.trace = az.from_dict(
-        posterior={'t0': np.full((1, 4, 1), 0.5)},
+        posterior={
+            't0': np.full((1, 4, 1), 0.5),
+            'gp_log_amp': np.zeros((1, 4)),
+            'gp_log_scale': np.full((1, 4), -2.0),
+            'g_log_sigma_lc': np.full((1, 4), np.log(0.35)),
+        },
         sample_stats={'lp': np.array([[-101.0, -100.0, -102.0, -103.0]])})
 
     monkeypatch.setattr(fit.util, 'get_map_soln', lambda trace: ({}, -100.0))
-    monkeypatch.setattr(fit.TransitFit, '_max_loglike', lambda self: -100.0)
+    monkeypatch.setattr(fit.TransitFit, '_max_loglike', lambda self: (-100.0, (0, 0)))
     monkeypatch.setattr(fit.TransitFit, '_count_params', lambda self: nparams)
     monkeypatch.setattr(fit.TransitFit, '_count_data', lambda self: ndata)
     monkeypatch.setattr(fit.TransitFit, '_count_gp_hyperparams', lambda self: 2)
     monkeypatch.setattr(fit.TransitFit, 'save_posterior_samples', lambda self: None)
     monkeypatch.setattr(fit.TransitFit, 'save_corrected', lambda self: None)
     return tf
+
+
+def _fit_with_two_draws(tmp_path, monkeypatch, ll_index):
+    """A save_results harness whose two draws have different GP amplitudes.
+
+    Draw 0 is the maximum posterior draw, which is what map_soln holds. Draw 1
+    has a larger amplitude and therefore a much larger edf. ll_index says which
+    draw the maximized likelihood came from, so pointing it at draw 1 must move
+    the reported edf onto draw 1's hyperparameters.
+    """
+    import arviz as az
+    from timer import fit
+
+    n = 20
+    data = _dataset(n=n)
+    amps = [-1.0, 0.5]                      # log10 amplitude per draw
+    tf = fit.TransitFit.__new__(fit.TransitFit)
+    tf.outdir = str(tmp_path)
+    tf.planets, tf.nplanets = 'c', 1
+    tf.ref_time, tf.clobber = 2460000.0, False
+    tf.use_gp, tf.gp_config = True, None
+    tf.data, tf.masks = data, {'g': None}
+    # map_soln is the maximum posterior draw, i.e. draw 0
+    tf.map_soln = _soln(amps[0], -2.0)
+    tf.trace = az.from_dict(
+        posterior={
+            't0': np.full((1, 2, 1), 0.5),
+            'gp_log_amp': np.array([amps]),
+            'gp_log_scale': np.full((1, 2), -2.0),
+            'g_log_sigma_lc': np.full((1, 2), np.log(0.35)),
+        },
+        sample_stats={'lp': np.array([[-100.0, -101.0]])})
+
+    monkeypatch.setattr(fit.util, 'get_map_soln', lambda trace: ({}, -100.0))
+    monkeypatch.setattr(fit.TransitFit, '_max_loglike',
+                        lambda self: (-100.0, ll_index))
+    monkeypatch.setattr(fit.TransitFit, '_count_params', lambda self: 13)
+    monkeypatch.setattr(fit.TransitFit, '_count_data', lambda self: 50)
+    monkeypatch.setattr(fit.TransitFit, '_count_gp_hyperparams', lambda self: 2)
+    monkeypatch.setattr(fit.TransitFit, 'save_posterior_samples', lambda self: None)
+    monkeypatch.setattr(fit.TransitFit, 'save_corrected', lambda self: None)
+    return tf, data, amps
+
+
+def test_edf_is_measured_at_the_draw_the_likelihood_came_from(tmp_path, monkeypatch):
+    """A criterion and its penalty have to describe one parameter vector.
+
+    max_loglike is taken at the likelihood maximizing draw, so the edf has to
+    be too. Reading it from map_soln instead mixes a likelihood from one draw
+    with a penalty from another; the edf varies by tens of units across a real
+    posterior and correlates with the likelihood, so the mismatch systematically
+    under-penalizes the GP.
+    """
+    from timer import model
+
+    tf, data, amps = _fit_with_two_draws(tmp_path, monkeypatch, ll_index=(0, 1))
+    tf.save_results()
+
+    rows = _ic_rows(tmp_path)
+    at_ll_draw = sum(model.compute_gp_edf(
+        _soln(amps[1], -2.0), data, {'g': None}, None).values())
+    at_map_draw = sum(model.compute_gp_edf(
+        _soln(amps[0], -2.0), data, {'g': None}, None).values())
+
+    assert at_ll_draw - at_map_draw > 1.0, 'fixture must separate the two draws'
+    assert rows['edf'] == pytest.approx(at_ll_draw, abs=0.005)
+
+
+def test_edf_follows_the_likelihood_index_when_it_is_the_first_draw(
+        tmp_path, monkeypatch):
+    """The control: with the likelihood peaking at draw 0 the edf must be
+    draw 0's, so the test above is not simply reading a fixed draw."""
+    from timer import model
+
+    tf, data, amps = _fit_with_two_draws(tmp_path, monkeypatch, ll_index=(0, 0))
+    tf.save_results()
+
+    rows = _ic_rows(tmp_path)
+    expected = sum(model.compute_gp_edf(
+        _soln(amps[0], -2.0), data, {'g': None}, None).values())
+    assert rows['edf'] == pytest.approx(expected, abs=0.005)
 
 
 def _ic_rows(tmp_path):

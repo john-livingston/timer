@@ -94,6 +94,12 @@ but not the residual overlap with the per-dataset offset or the transit
 parameters, neither of which is a column of `X`. It is therefore a tight upper
 bound, not an exact figure.
 
+`edf` is measured at the draw the maximized likelihood came from, not at the
+maximum posterior draw the rest of the outputs are built from. A criterion and
+its penalty have to describe one parameter vector: the edf varies by tens of
+units across a posterior and moves with the likelihood, so taking the two from
+different draws shifts `BIC_edf` by more than the overlap correction is worth.
+
 The `*_edf` rows are omitted entirely, with a logged warning, when a dataset's
 design matrix is rank deficient, since the overlap the correction needs is then
 undefined. Two configurations trigger this in practice: `add_bias: true`

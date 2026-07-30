@@ -501,16 +501,17 @@ class TransitFit:
 
     def get_ic(self, ic='BIC', verbose=False):
         soln, _ = util.get_map_soln(self.trace)
-        max_loglike = self._max_loglike()
+        max_loglike, _ = self._max_loglike()
         nparams = self._count_params()
         ndata = self._count_data()
         return util.compute_ic(soln, max_loglike, nparams, ndata, method=ic, verbose=verbose)
 
     def _max_loglike(self):
-        """Maximum observed-data log likelihood, which is what BIC/AIC want.
+        """(maximum observed-data log likelihood, the (chain, draw) it came from).
 
         Not sample_stats['lp'], which is the joint log density and would make
-        every criterion depend on the prior widths. See model.max_log_likelihood.
+        every criterion depend on the prior widths. The index is returned so any
+        penalty can be evaluated at the same draw. See model.max_log_likelihood.
         """
         return model.max_log_likelihood(self.model, self.trace.posterior)
 
@@ -856,7 +857,7 @@ class TransitFit:
                 f.write(f'{line}\n')
         with open(os.path.join(self.outdir, 'ic.txt'), 'w') as f:
             soln, _ = util.get_map_soln(self.trace)
-            max_loglike = self._max_loglike()
+            max_loglike, ll_index = self._max_loglike()
             nparams = self._count_params()
             ndata = self._count_data()
             ics = 'BIC AIC AICc'.split()
@@ -881,8 +882,15 @@ class TransitFit:
             # posterior samples / corrected light curves saved below.
             if self.use_gp:
                 try:
+                    # the penalty has to describe the parameter vector the
+                    # likelihood above was evaluated at. self.map_soln is the
+                    # maximum posterior draw, which is a different draw: on a
+                    # short fixture trace the edf already ranged over 33 units
+                    # across draws, and it correlates with the likelihood, so
+                    # taking it from map_soln under-penalizes the GP.
+                    ll_soln = util.get_soln_at(self.trace, *ll_index)
                     edf_by_dataset = model.compute_gp_edf(
-                        self.map_soln, self.data, self.masks, self.gp_config)
+                        ll_soln, self.data, self.masks, self.gp_config)
                     if edf_by_dataset is not None:
                         edf = sum(edf_by_dataset.values())
                         nparams_edf = nparams - self._count_gp_hyperparams() + edf

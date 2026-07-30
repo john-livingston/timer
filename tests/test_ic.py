@@ -176,6 +176,25 @@ def test_the_likelihood_is_maximized_over_the_draws():
     assert fit.get_ic(ic='BIC') == pytest.approx(8.73780262, abs=1e-6)
 
 
+def test_max_log_likelihood_reports_which_draw_it_came_from():
+    """save_results evaluates the GP edf at this index so the penalty describes
+    the same parameter vector as the likelihood. A hardcoded (0, 0) would give
+    the right likelihood with a penalty from the wrong draw, which nothing
+    downstream can detect.
+
+    The fixture's draws are mu = 0.5 then mu = 0, and the likelihood is higher
+    at mu = 0, so the answer is draw 1 and not draw 0.
+    """
+    from timer import model
+
+    fit = _one_parameter_fit(prior_sigma=1e3)
+
+    value, index = model.max_log_likelihood(fit.model, fit.trace.posterior)
+
+    assert value == pytest.approx(-3.67575413, abs=1e-6)
+    assert index == (0, 1)
+
+
 def test_get_ic_uses_the_masked_point_count_in_the_penalty(gp_shaped_model):
     """The penalty is k*ln(n) over the points that entered the likelihood."""
     fit = _one_parameter_fit(prior_sigma=1e3)

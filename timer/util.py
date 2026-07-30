@@ -61,14 +61,12 @@ DERIVED_SUFFIXES = ('_light_curves', '_light_curves_hr', '_lc_pred', '_lm',
                     '_flare', '_bump', '_y_observed', '_gp_pred')
 
 
-def get_map_soln(trace):
-    # arviz trace is an InferenceData object.
-    # Index the single best sample rather than masking a copy of the whole
-    # posterior: selecting by equality keeps every draw that ties on lp, and
-    # short chains repeat samples often. nanargmax/nanmax also skip nan log
-    # probabilities rather than selecting a nan sample as the best one.
-    lp_values = np.asarray(trace.sample_stats["lp"].values)
-    chain, draw = np.unravel_index(np.nanargmax(lp_values), lp_values.shape)
+def get_soln_at(trace, chain, draw):
+    """Solution dict for a single posterior draw, indexed by (chain, draw).
+
+    Indexes the one sample rather than masking a copy of the whole posterior,
+    which would materialize every deterministic array.
+    """
     trace_map = trace.posterior.isel(chain=chain, draw=draw)
     soln = {}
     for k, v in trace_map.data_vars.items():
@@ -82,7 +80,18 @@ def get_map_soln(trace):
             # checks them against the model's declared shapes, so a shape (1,)
             # site must not come back as a Python float
             soln[k] = val
-    return soln, float(np.nanmax(lp_values))
+    return soln
+
+
+def get_map_soln(trace):
+    # arviz trace is an InferenceData object.
+    # Index the single best sample rather than masking a copy of the whole
+    # posterior: selecting by equality keeps every draw that ties on lp, and
+    # short chains repeat samples often. nanargmax/nanmax also skip nan log
+    # probabilities rather than selecting a nan sample as the best one.
+    lp_values = np.asarray(trace.sample_stats["lp"].values)
+    chain, draw = np.unravel_index(np.nanargmax(lp_values), lp_values.shape)
+    return get_soln_at(trace, chain, draw), float(np.nanmax(lp_values))
 
 def get_var_names(data, bands, fit_basis, use_gp, fixed,
                   chromatic=False, log_sigma=True, weights=False, gp_config=None):
