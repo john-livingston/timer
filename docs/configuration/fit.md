@@ -48,7 +48,7 @@ Each dataset is listed under `data:` with a user-chosen key. Multiple datasets c
 | `clip`    | Enable sigma-clipping of outliers | `false` |
 | `clip_nsig` | Sigma threshold for outlier clipping | `5` |
 | `chunk_offset` | Add offset columns for data gaps | `false` |
-| `chunk_thresh` | Gap threshold in days for chunk detection | `0` |
+| `chunk_thresh` | Gap threshold in days above which a new offset column starts; must be > 0 when `chunk_offset` is enabled | `0.02` |
 
 ### Data formats
 
