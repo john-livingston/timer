@@ -6,7 +6,26 @@ import pytest
 import yaml
 
 
-def make_project(root, n=60, use_gp=False):
+# index of the outlier make_project injects when clip=True
+OUTLIER_INDEX = 17
+
+
+def _flare(t0, ampl=6.0):
+    """A flare peaking just after mid-transit, in ppt."""
+    return dict(tpeak=t0 + 0.035, tpeak_unc=0.01, tpeak_prior='uniform',
+                fwhm=0.008, fwhm_unc=0.01, fwhm_prior='uniform',
+                ampl=ampl, ampl_unc=ampl * 2, ampl_prior='uniform')
+
+
+def _bump(t0, ampl=2.0):
+    """A Gaussian bump inside the transit, as a spot crossing would be."""
+    return dict(tcenter=t0 - 0.005, tcenter_unc=0.01, tcenter_prior='uniform',
+                width=0.004, width_unc=0.008, width_prior='uniform',
+                ampl=ampl, ampl_unc=ampl * 2, ampl_prior='uniform')
+
+
+def make_project(root, n=60, use_gp=False, clip=False, uniform=None,
+                 flare=False, bump=False, bands=('g',)):
     """Write a minimal but complete timer project into `root`.
 
     One dataset in a single band, a linear trend, a boxy transit and white
@@ -16,28 +35,72 @@ def make_project(root, n=60, use_gp=False):
     With use_gp the light curve also carries a smooth wobble several times the
     white noise, so there is something for the GP to absorb and the GP branch
     of every downstream consumer is genuinely exercised.
+
+    The other switches turn on the configuration branches that no fixture used
+    to reach:
+
+    clip    inject one 12 sigma point at a known index and set clip: true, so
+            clip_outliers actually removes something and the refit path and
+            every masked consumer run.
+    uniform pass a dict straight through to fit.yaml's `uniform` block.
+    flare   include_flare, with a flare planted in the light curve.
+    bump    include_bump, with a bump planted in the light curve.
+    bands   one dataset per band. More than one with chromatic exercises the
+            per-band ror sites.
+
+    Returns (fit_params, sys_params). The injected outlier is always at index
+    OUTLIER_INDEX so tests can assert which point was clipped.
     """
     os.makedirs(root, exist_ok=True)
     rng = np.random.default_rng(11)
+    t0 = 2460423.06
     t = np.linspace(2460423.0, 2460423.12, n)
-    depth = np.where(np.abs(t - 2460423.06) < 0.02, -0.004, 0.0)
+    depth = np.where(np.abs(t - t0) < 0.02, -0.004, 0.0)
     trend = 0.002 * (t - t.mean()) / 0.06
-    flux = 1.0 + depth + trend + rng.normal(0, 3e-4, n)
-    if use_gp:
-        flux = flux + 0.003 * np.sin(2 * np.pi * (t - t[0]) / 0.05)
-    pd.DataFrame({'time': t, 'flux': flux,
-                  'fluxerr': np.full(n, 3e-4)}).to_csv(
-        os.path.join(root, 'g.csv'), index=False)
+
+    data_cfg = {}
+    for band in bands:
+        flux = 1.0 + depth + trend + rng.normal(0, 3e-4, n)
+        if use_gp:
+            flux = flux + 0.003 * np.sin(2 * np.pi * (t - t[0]) / 0.05)
+        if flare:
+            spec = _flare(t0)
+            dt = t - spec['tpeak']
+            flux = flux + 1e-3 * spec['ampl'] * np.exp(
+                -0.5 * (dt / (spec['fwhm'] / 2.355))**2) * (dt > -spec['fwhm'])
+        if bump:
+            spec = _bump(t0)
+            flux = flux + 1e-3 * spec['ampl'] * np.exp(
+                -0.5 * ((t - spec['tcenter']) / spec['width'])**2)
+        if clip:
+            # one unmistakable outlier, far outside anything the noise produces
+            flux[OUTLIER_INDEX] += 12 * 3e-4
+        fn = f'{band}.csv'
+        pd.DataFrame({'time': t, 'flux': flux,
+                      'fluxerr': np.full(n, 3e-4)}).to_csv(
+            os.path.join(root, fn), index=False)
+        data_cfg[band] = {'file': fn, 'band': band, 'trend': 1,
+                          'binsize': None, 'format': 'generic'}
+        if clip:
+            data_cfg[band].update(clip=True, clip_nsig=5)
+
     fit_params = {
-        'data': {'g': {'file': 'g.csv', 'band': 'g', 'trend': 1,
-                       'binsize': None, 'format': 'generic'}},
+        'data': data_cfg,
         'planets': 'c',
-        'tc_pred': 2460423.06,
+        'tc_pred': t0,
         'tc_pred_unc': 0.02,
-        'chromatic': False,
+        'chromatic': len(bands) > 1,
         'fixed': ['period', 'u_star'],
         'tune': 5, 'draws': 5, 'chains': 1, 'cores': 1,
     }
+    if uniform:
+        fit_params['uniform'] = uniform
+    if flare:
+        fit_params['include_flare'] = True
+        fit_params['flare'] = _flare(t0)
+    if bump:
+        fit_params['include_bump'] = True
+        fit_params['bump'] = _bump(t0)
     sys_params = {
         'star': {'teff': [5675, 75], 'logg': [4.2, 0.2], 'feh': [0.0, 0.5]},
         'planets': {'c': {'b': [0.15, 0.15], 'dur': [0.04, 0.005],
