@@ -709,22 +709,24 @@ def compute_gp_edf(map_soln, datasets, masks, gp_config, max_points=5000):
     a GP charged for 5 hyperparameters absorbed about 110 degrees of freedom
     out of 560 points, which reverses the model comparison.
 
-    Computed as n - tr(S (K+S)^-1), which needs only the diagonal of the
-    inverse: n solves, each O(n), so O(n^2) overall.
+    The GP's own smoother trace is computed as n - tr(S (K+S)^-1), which needs
+    only the diagonal of the inverse: n solves, each O(n), so O(n^2) overall.
+    The design overlap is then subtracted from it, at the cost of one further
+    n by p solve.
+
+    The value returned is the GP's share of the joint effective degrees of
+    freedom of a fit with a parametric mean and a GP, with the overlap between
+    the GP and the design matrix already subtracted out. The caller adds the p
+    design columns on top, since those are already counted in nparams. This is
+    a tight upper bound rather than an exact figure: the overlap with the
+    per-dataset offset and the transit parameters is not subtracted, since
+    neither is a column of the design matrix.
 
     Returns {dataset_name: edf}, or None if any dataset exceeds max_points,
-    since the cost is prohibitive at survey scale. Returning None rather than
-    a partial sum keeps the caller from reporting a number that omits a
-    dataset.
-
-    This is the smoother trace of the GP alone. When the model also has a
-    linear systematics term, the two overlap: the joint effective degrees of
-    freedom is p + tr(K C^-1) - tr(K C^-1 P), with P the design matrix's
-    projection under C. The overlap term is not subtracted here, so adding
-    this to the parametric count gives an upper bound rather than an exact
-    figure, by up to the number of design matrix columns. The bias always
-    penalizes the GP, so it cannot manufacture a preference for one, but it
-    can suppress a real one on a wide design matrix.
+    since the cost is prohibitive at survey scale, or if any dataset's design
+    matrix is rank deficient, since the overlap is then undefined. Returning
+    None rather than a partial sum keeps the caller from reporting a number
+    that omits a dataset.
     """
     for name, data in datasets.items():
         mask = masks[name]
@@ -747,7 +749,50 @@ def compute_gp_edf(map_soln, datasets, masks, gp_config, max_points=5000):
         n = int(np.sum(mask))
         basis = np.eye(n)
         inv_diag = np.array([gp.apply_inverse(basis[:, i])[i] for i in range(n)])
-        edf[name] = float(n - np.sum(diag * inv_diag))
+        gp_trace = n - np.sum(diag * inv_diag)
+
+        X = data.get('X')
+        if X is None:
+            # no parametric mean, so nothing for the GP to overlap with
+            edf[name] = float(gp_trace)
+            continue
+
+        Xm = X[mask]
+        p = Xm.shape[1]
+        # The projection P needs (X^T C^-1 X)^-1, which does not exist for a
+        # rank deficient design. Checked here rather than left to
+        # np.linalg.solve: LAPACK raises only on an exactly zero pivot, and the
+        # configurations that hit this are singular by structure rather than by
+        # repetition, so rounding leaves them nominally invertible and the
+        # solve returns a confident wrong number. add_bias with chunk_offset is
+        # the common case, since the chunk indicators sum to the bias column,
+        # and clipping can empty a chunk indicator.
+        if np.linalg.matrix_rank(Xm) < p:
+            logging.warning(
+                f'skipping GP effective degrees of freedom: dataset {name} has a '
+                f'rank deficient design matrix ({p} columns, rank '
+                f'{np.linalg.matrix_rank(Xm)}), so the overlap between the GP and '
+                f'the design is undefined'
+            )
+            return None
+        # A = C^-1 X in one solve; celerite2 accepts the n by p matrix directly
+        A = np.asarray(gp.apply_inverse(Xm))
+        # tr(K C^-1 P) = p - tr((A^T S A)(X^T A)^-1), where C = K + S and P is
+        # the design-matrix projection under C, from K C^-1 = I - S C^-1 and
+        # the cyclic property of the trace
+        try:
+            overlap = p - np.trace(
+                np.linalg.solve(Xm.T @ A, A.T @ (diag[:, None] * A)))
+        except np.linalg.LinAlgError:
+            # backstop: X can be full rank while X^T C^-1 X is numerically
+            # singular for a badly conditioned design
+            logging.warning(
+                f'skipping GP effective degrees of freedom: dataset {name} has a '
+                f'singular X^T C^-1 X, so the overlap between the GP and the '
+                f'design is undefined'
+            )
+            return None
+        edf[name] = float(gp_trace - overlap)
     return edf
 
 

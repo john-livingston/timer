@@ -866,11 +866,15 @@ class TransitFit:
 
             # a GP is charged for its hyperparameters but absorbs far more
             # degrees of freedom, so report a corrected count alongside.
-            # nparams_edf is an upper bound: compute_gp_edf measures the GP
-            # smoother alone and does not subtract its overlap with the linear
-            # model, so the correction can over-penalize a GP on a wide design
-            # matrix. See compute_gp_edf's docstring. This
-            # does real GP linear algebra and reads GP hyperparameters back
+            #
+            # nparams_edf, and every *_edf row below it, subtracts the overlap
+            # between the GP and the design matrix X, but not the residual
+            # overlap with the per-dataset offset or the transit parameters,
+            # neither of which is a column of X. It is therefore a tight upper
+            # bound, not an exact figure.
+            #
+            # compute_gp_edf does real GP linear algebra and reads GP
+            # hyperparameters back
             # out of map_soln, so it can fail (e.g. a force-loaded map.pkl
             # whose gp.per_dataset no longer matches the current config); a
             # failure here must not cost the uncorrected rows above or the

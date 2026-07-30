@@ -87,10 +87,21 @@ it. Recompute rather than mixing them.
 
 For GP fits, `edf` is the number of degrees of freedom the GP smoother actually
 absorbs, typically far more than its two or three hyperparameters, and the
-`*_edf` rows repeat each criterion with that substituted. Treat `nparams_edf`
-as an upper bound: it does not subtract the overlap between the GP and the
-linear systematics model, so a fit with a wide design matrix is charged for
-some flexibility twice.
+`*_edf` rows repeat each criterion with that substituted.
+
+`nparams_edf` subtracts the overlap between the GP and the design matrix `X`,
+but not the residual overlap with the per-dataset offset or the transit
+parameters, neither of which is a column of `X`. It is therefore a tight upper
+bound, not an exact figure.
+
+The `*_edf` rows are omitted entirely, with a logged warning, when a dataset's
+design matrix is rank deficient, since the overlap the correction needs is then
+undefined. Two configurations trigger this in practice: `add_bias: true`
+together with `chunk_offset: true` is structurally singular, since the chunk
+indicator columns always sum to the bias column, and outlier clipping can empty
+a chunk indicator column, turning an otherwise full-rank design rank deficient
+after masking. Both fail safe: the uncorrected `BIC`, `AIC` and `AICc` rows
+above are written either way.
 
 ### Reading *-cor.csv
 

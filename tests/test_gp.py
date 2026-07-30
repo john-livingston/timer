@@ -21,6 +21,26 @@ def _soln(log_amp, log_scale, log_sigma_lc=np.log(0.35)):
     }
 
 
+def _dense_matern32(x, amp, rho):
+    """The Matern 3/2 covariance, written out in numpy.
+
+    Shares nothing with celerite2, so the references built from it are
+    independent of the implementation under test.
+    """
+    r = np.sqrt(3) * np.abs(x[:, None] - x[None, :]) / rho
+    return amp**2 * (1 + r) * np.exp(-r)
+
+
+def _dense_joint_edf(x, yerr, X, amp, rho, jitter=0.35):
+    """tr(P + K C^-1 (I - P)), the joint effective degrees of freedom of a
+    parametric mean plus a GP, formed densely."""
+    K = _dense_matern32(x, amp, rho)
+    C = K + np.diag(jitter**2 + yerr**2)
+    Ci = np.linalg.inv(C)
+    P = X @ np.linalg.inv(X.T @ Ci @ X) @ X.T @ Ci
+    return np.trace(P + K @ Ci @ (np.eye(len(x)) - P))
+
+
 def test_edf_matches_the_dense_smoother_trace():
     """The identity edf = n - tr(S (K+S)^-1) must agree with the direct
     tr(K (K+S)^-1) built from the Matern 3/2 kernel by hand. This is the whole
@@ -112,6 +132,162 @@ def test_returns_none_and_warns_above_max_points(caplog):
     assert 'max_points=10' in caplog.text
     assert 'dataset g' in caplog.text
     assert str(len(data['g']['x'])) in caplog.text
+
+
+def test_edf_matches_the_joint_hat_matrix_trace():
+    """The joint effective degrees of freedom of a parametric mean plus a GP is
+    tr(P + K C^-1 (I - P)), not p + tr(K C^-1). The difference is the overlap
+    between the GP and the design, which approaches p whenever the GP can
+    reproduce the design columns, and on a polynomial trend that is most of the
+    low frequency power.
+    """
+    from timer import model
+
+    rng = np.random.default_rng(0)
+    n, p = 60, 3
+    x = np.sort(rng.uniform(0.0, 0.2, n))
+    yerr = np.full(n, 0.35)
+    X = np.column_stack([np.ones(n), x - x.mean(), rng.normal(size=n)])
+    amp, rho = 1.3, 0.02
+
+    data = {'g': dict(x=x, y=np.zeros(n), yerr=yerr, X=X,
+                      texp=0.001, x_hr=x, band='g', ref_time=0.0)}
+    # _soln defaults log_sigma_lc to log(0.35), the jitter the reference assumes
+    soln = _soln(np.log10(amp), np.log10(rho))
+
+    edf = model.compute_gp_edf(soln, data, {'g': None}, gp_config=None)['g']
+
+    # compute_gp_edf returns the GP's share; the p design columns are already
+    # counted in nparams, so p + edf is the joint figure.
+    # abs=1e-6 because celerite2's eps approximation caps agreement near 7e-8.
+    assert p + edf == pytest.approx(
+        _dense_joint_edf(x, yerr, X, amp, rho), abs=1e-6)
+
+
+def test_edf_is_strictly_below_the_gp_alone_trace_when_a_design_is_present():
+    """The overlap is non-negative, so correcting for it can only reduce the
+    count. Pins the sign of the subtraction, and that it cannot exceed p."""
+    from timer import model
+
+    rng = np.random.default_rng(1)
+    n = 50
+    x = np.sort(rng.uniform(0.0, 0.2, n))
+    yerr = np.full(n, 0.3)
+    X = np.column_stack([np.ones(n), x - x.mean()])
+    soln = _soln(0.0, -1.7, np.log(0.3))
+    base = dict(x=x, y=np.zeros(n), yerr=yerr, texp=0.001, x_hr=x,
+                band='g', ref_time=0.0)
+
+    with_design = model.compute_gp_edf(
+        soln, {'g': dict(base, X=X)}, {'g': None}, gp_config=None)['g']
+    without = model.compute_gp_edf(
+        soln, {'g': dict(base, X=None)}, {'g': None}, gp_config=None)['g']
+
+    assert with_design < without
+    assert without - with_design <= X.shape[1] + 1e-9, 'overlap cannot exceed p'
+
+
+def test_edf_is_unchanged_for_a_gp_only_fit():
+    """X is None means p = 0, so there is nothing to overlap with and the value
+    must stay the plain smoother trace tr(K C^-1)."""
+    from timer import model
+
+    rng = np.random.default_rng(2)
+    n = 40
+    x = np.sort(rng.uniform(0.0, 0.2, n))
+    yerr = np.full(n, 0.3)
+    amp, rho, jitter = 1.0, 10**-1.7, 0.3
+    soln = _soln(np.log10(amp), np.log10(rho), np.log(jitter))
+    data = {'g': dict(x=x, y=np.zeros(n), yerr=yerr, X=None, texp=0.001,
+                      x_hr=x, band='g', ref_time=0.0)}
+
+    edf = model.compute_gp_edf(soln, data, {'g': None}, gp_config=None)['g']
+
+    K = _dense_matern32(x, amp, rho)
+    Ci = np.linalg.inv(K + np.diag(jitter**2 + yerr**2))
+    assert edf == pytest.approx(np.trace(K @ Ci), abs=1e-6)
+
+
+def test_edf_returns_none_for_a_rank_deficient_design(caplog):
+    """A singular X^T A leaves the overlap undefined, so no *_edf row may be
+    written at all. Reached in practice by add_bias with chunk_offset, whose
+    chunk indicators sum to the bias column, and by clipping emptying a chunk
+    indicator."""
+    from timer import model
+
+    rng = np.random.default_rng(3)
+    n = 40
+    x = np.sort(rng.uniform(0.0, 0.2, n))
+    yerr = np.full(n, 0.3)
+    col = x - x.mean()
+    X = np.column_stack([col, col])          # exactly collinear
+    soln = _soln(0.0, -1.7, np.log(0.3))
+    data = {'g': dict(x=x, y=np.zeros(n), yerr=yerr, X=X, texp=0.001,
+                      x_hr=x, band='g', ref_time=0.0)}
+
+    with caplog.at_level(logging.WARNING):
+        result = model.compute_gp_edf(soln, data, {'g': None}, gp_config=None)
+
+    assert result is None
+    assert 'dataset g' in caplog.text and 'design' in caplog.text
+
+
+def test_edf_returns_none_for_a_structurally_singular_design(caplog):
+    """The realistic rank deficient case, which exact column duplication does
+    not reach.
+
+    `add_bias: true` with `chunk_offset: true` produces [ones, chunk0, chunk1]
+    where the chunk indicators sum to the bias column: rank p-1, but no two
+    columns are equal. np.linalg.solve only raises LinAlgError when LAPACK
+    finds an exactly zero pivot, and rounding on a matrix like this leaves it
+    nominally invertible, so relying on the exception returns a confident wrong
+    number instead of skipping the rows.
+    """
+    from timer import model
+
+    rng = np.random.default_rng(5)
+    n = 40
+    x = np.sort(rng.uniform(0.0, 0.2, n))
+    yerr = np.full(n, 0.3)
+    chunk0 = np.where(np.arange(n) < n // 2, 1.0, 0.0)
+    X = np.column_stack([np.ones(n), chunk0, 1.0 - chunk0])
+    assert np.linalg.matrix_rank(X) == 2, 'fixture must be rank deficient'
+    soln = _soln(0.0, -1.7, np.log(0.3))
+    data = {'g': dict(x=x, y=np.zeros(n), yerr=yerr, X=X, texp=0.001,
+                      x_hr=x, band='g', ref_time=0.0)}
+
+    with caplog.at_level(logging.WARNING):
+        result = model.compute_gp_edf(soln, data, {'g': None}, gp_config=None)
+
+    assert result is None
+    assert 'dataset g' in caplog.text and 'design' in caplog.text
+
+
+def test_edf_masks_the_design_matrix_the_same_as_x_and_yerr():
+    """Every other test here pairs a design matrix with an all-True mask or a
+    real mask with X=None, so none exercises the masking of X itself. This mask
+    keeps every other point, so a design matrix not restricted the same way as
+    x and yerr changes both the shapes and the number.
+    """
+    from timer import model
+
+    rng = np.random.default_rng(4)
+    n, p = 50, 2
+    x = np.sort(rng.uniform(0.0, 0.2, n))
+    yerr = np.full(n, 0.3)
+    X = np.column_stack([np.ones(n), x - x.mean()])
+    mask = np.zeros(n, dtype=bool)
+    mask[::2] = True
+    amp, rho = 1.1, 0.02
+
+    data = {'g': dict(x=x, y=np.zeros(n), yerr=yerr, X=X,
+                      texp=0.001, x_hr=x, band='g', ref_time=0.0)}
+    soln = _soln(np.log10(amp), np.log10(rho))
+
+    edf = model.compute_gp_edf(soln, data, {'g': mask}, gp_config=None)['g']
+
+    assert p + edf == pytest.approx(
+        _dense_joint_edf(x[mask], yerr[mask], X[mask], amp, rho), abs=1e-6)
 
 
 def test_gp_predictions_without_a_mean_treat_it_as_zero():
