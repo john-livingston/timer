@@ -187,6 +187,81 @@ def test_a_stale_mask_disqualifies_the_model_built_on_it(tmp_path, stub_build):
     assert 'map.pkl' not in manifest
 
 
+def _bare_fit_for_clip(tmp_path, previous_mask, new_mask, monkeypatch):
+    """A TransitFit carrying only what clip_outliers reads, with the mask the
+    recompute will return stubbed out.
+
+    clobber is set so the recompute happens even though a mask is already
+    present, which is the from_dir-with-clobber path.
+    """
+    from timer import fit
+
+    n = len(new_mask)
+    tf = fit.TransitFit.__new__(fit.TransitFit)
+    tf.outdir = str(tmp_path)
+    tf.clobber = True
+    tf._cache_keys = {'model': 'MODELKEY', 'run': 'RUNKEY'}
+    tf._stale_force_loaded = set()
+    tf.data = {'g': {'x': np.arange(float(n)), 'y': np.zeros(n)}}
+    tf.fit_params = {'data': {'g': {'clip': True, 'clip_nsig': 5}}}
+    tf.masks = {'g': previous_mask}
+    tf.map_soln = {'g_light_curves': np.zeros(n)}
+    tf.use_gp = tf.include_flare = tf.include_bump = False
+
+    monkeypatch.setattr(fit.util, 'get_outlier_mask',
+                        lambda *a, **k: new_mask.copy())
+    rebuilt = []
+    monkeypatch.setattr(fit.TransitFit, 'build_model',
+                        lambda self, **kw: rebuilt.append(kw))
+    return tf, rebuilt
+
+
+def test_a_recomputed_mask_that_clips_less_still_refits(tmp_path, monkeypatch):
+    """The model has to be refitted whenever the mask it was built on changed,
+    not merely whenever the new mask excludes something.
+
+    Reachable through from_dir with clobber: true, which loads a mask and then
+    recomputes it. If the new mask excludes fewer points, n_outliers is 0 and
+    the refit is skipped, so model.pkl and map.pkl keep describing the old
+    masking while mask.pkl is rewritten and recorded under the current key.
+    """
+    previous = np.array([True, True, False, True])     # one point clipped
+    fresh = np.array([True, True, True, True])         # nothing clipped now
+
+    tf, rebuilt = _bare_fit_for_clip(tmp_path, previous, fresh, monkeypatch)
+    tf.clip_outliers()
+
+    assert rebuilt, 'the mask changed, so the model must be refitted'
+
+
+def test_an_unchanged_recomputed_mask_does_not_refit(tmp_path, monkeypatch):
+    """The control: recomputing the same mask must not trigger a pointless
+    refit, which on a real fit costs the whole MAP optimization."""
+    same = np.array([True, True, False, True])
+
+    tf, rebuilt = _bare_fit_for_clip(tmp_path, same.copy(), same, monkeypatch)
+    tf.clip_outliers()
+
+    assert not rebuilt
+
+
+def test_a_first_mask_with_no_outliers_does_not_refit(tmp_path, monkeypatch):
+    """No previous mask and nothing clipped is not a change either."""
+    tf, rebuilt = _bare_fit_for_clip(
+        tmp_path, None, np.ones(4, dtype=bool), monkeypatch)
+    tf.clip_outliers()
+
+    assert not rebuilt
+
+
+def test_a_first_mask_that_clips_refits(tmp_path, monkeypatch):
+    tf, rebuilt = _bare_fit_for_clip(
+        tmp_path, None, np.array([True, False, True, True]), monkeypatch)
+    tf.clip_outliers()
+
+    assert rebuilt
+
+
 def _bare_fit_for_load(tmp_path, datasets):
     """A TransitFit carrying only what load_saved reads, over real data files."""
     from timer import fit

@@ -354,7 +354,12 @@ def _fit_for_save_results(tmp_path, use_gp, monkeypatch, nparams=13, ndata=50):
         },
         sample_stats={'lp': np.array([[-101.0, -100.0, -102.0, -103.0]])})
 
-    monkeypatch.setattr(fit.util, 'get_map_soln', lambda trace: ({}, -100.0))
+    # deliberately different values: get_map_soln returns the joint log
+    # density, which carries the prior terms and so is more negative, while
+    # _max_loglike returns the likelihood the criteria must use. Giving both
+    # the same number leaves save_results free to read either one, and
+    # save_results is the function that writes the file.
+    monkeypatch.setattr(fit.util, 'get_map_soln', lambda trace: ({}, -116.0))
     monkeypatch.setattr(fit.TransitFit, '_max_loglike', lambda self: (-100.0, (0, 0)))
     monkeypatch.setattr(fit.TransitFit, '_count_params', lambda self: nparams)
     monkeypatch.setattr(fit.TransitFit, '_count_data', lambda self: ndata)
@@ -395,7 +400,7 @@ def _fit_with_two_draws(tmp_path, monkeypatch, ll_index):
         },
         sample_stats={'lp': np.array([[-100.0, -101.0]])})
 
-    monkeypatch.setattr(fit.util, 'get_map_soln', lambda trace: ({}, -100.0))
+    monkeypatch.setattr(fit.util, 'get_map_soln', lambda trace: ({}, -116.0))
     monkeypatch.setattr(fit.TransitFit, '_max_loglike',
                         lambda self: (-100.0, ll_index))
     monkeypatch.setattr(fit.TransitFit, '_count_params', lambda self: 13)

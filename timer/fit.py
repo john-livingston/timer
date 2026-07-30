@@ -592,6 +592,11 @@ class TransitFit:
                     else:
                         current_fn = fn
                     fp = os.path.join(self.outdir, current_fn)
+                    # None means every point is in, which is what the model was
+                    # built on if no mask existed yet
+                    previous = self.masks[name]
+                    if previous is None:
+                        previous = np.ones(len(y), dtype=bool)
                     self.masks[name] = util.get_outlier_mask(
                         x, y, name, map_soln, use_gp,
                         nsig=clip_nsig, include_flare=include_flare, include_bump=include_bump, fp=fp
@@ -599,6 +604,12 @@ class TransitFit:
                     n_outliers = self.masks[name].size - self.masks[name].sum()
                     if n_outliers > 0:
                         logging.info(f'clipped {n_outliers} outlier(s)')
+                    # refit when the mask the model was built on changed, not
+                    # merely when the new mask excludes something. from_dir with
+                    # clobber recomputes over an existing mask, and a new mask
+                    # that clips fewer points is still a change; conversely
+                    # recomputing the same mask needs no refit at all.
+                    if not np.array_equal(previous, self.masks[name]):
                         clipped = True
         cache.drop_entry(self.outdir, 'mask.pkl')
         pickle.dump(self.masks, open(os.path.join(self.outdir, 'mask.pkl'), 'wb'))

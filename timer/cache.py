@@ -7,7 +7,12 @@ import hashlib
 import json
 import os
 
-FORMAT_VERSION = 1
+# 2: bin_df began scaling median-binned errors by sqrt(pi/2) and
+# get_outlier_mask began scaling the clip threshold by 1.4826. Both changed the
+# likelihood the sampler sees without changing any config value or data file
+# byte, which is all compute_keys digests, so a version 1 cache would otherwise
+# validate as current and its map.pkl and trace.pkl would be reused.
+FORMAT_VERSION = 2
 
 # keys that affect sampling only, never the model or the MAP solution
 RUN_TIER = frozenset({'tune', 'draws', 'chains'})

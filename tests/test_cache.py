@@ -168,6 +168,22 @@ def test_read_manifest_returns_none_for_unparseable_json(tmp_path):
     assert cache.read_manifest(str(tmp_path)) is None
 
 
+def test_a_version_1_manifest_is_rejected(tmp_path):
+    """Caches written before the binning and clipping fixes must not validate.
+
+    bin_df now scales median-binned errors by sqrt(pi/2) and get_outlier_mask
+    scales the clip threshold by 1.4826, so both the likelihood weights and the
+    mask changed. compute_keys digests the config and the data file bytes,
+    neither of which moved, so an out/ directory from before those fixes would
+    otherwise read as current: map.pkl reused, MCMC skipped, and results written
+    from a posterior fitted to errors 25 percent too small, permanently until
+    clobber. Bumping the format version is the only thing that invalidates it.
+    """
+    (tmp_path / cache.MANIFEST_NAME).write_text(
+        json.dumps({'format_version': 1, 'map.pkl': 'K', 'trace.pkl': 'R'}))
+    assert cache.read_manifest(str(tmp_path)) is None
+
+
 def test_read_manifest_returns_none_for_a_foreign_format_version(tmp_path):
     """This is what makes bumping FORMAT_VERSION invalidate caches on disk."""
     (tmp_path / cache.MANIFEST_NAME).write_text(
