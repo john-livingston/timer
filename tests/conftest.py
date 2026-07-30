@@ -17,7 +17,7 @@ def _flare(t0, ampl=6.0):
                 ampl=ampl, ampl_unc=ampl * 2, ampl_prior='uniform')
 
 
-def _bump(t0, ampl=2.0):
+def _bump(t0, ampl=5.0):
     """A Gaussian bump inside the transit, as a spot crossing would be."""
     return dict(tcenter=t0 - 0.005, tcenter_unc=0.01, tcenter_prior='uniform',
                 width=0.004, width_unc=0.008, width_prior='uniform',
@@ -25,7 +25,7 @@ def _bump(t0, ampl=2.0):
 
 
 def make_project(root, n=60, use_gp=False, clip=False, uniform=None,
-                 flare=False, bump=False, bands=('g',)):
+                 flare=False, bump=False, bands=('g',), fit_u_star=False):
     """Write a minimal but complete timer project into `root`.
 
     One dataset in a single band, a linear trend, a boxy transit and white
@@ -47,6 +47,9 @@ def make_project(root, n=60, use_gp=False, clip=False, uniform=None,
     bump    include_bump, with a bump planted in the light curve.
     bands   one dataset per band. More than one with chromatic exercises the
             per-band ror sites.
+    fit_u_star
+            drop u_star from `fixed`, so limb darkening is sampled per band
+            from the claret priors instead of held at them.
 
     Returns (fit_params, sys_params). The injected outlier is always at index
     OUTLIER_INDEX so tests can assert which point was clipped.
@@ -63,15 +66,21 @@ def make_project(root, n=60, use_gp=False, clip=False, uniform=None,
         flux = 1.0 + depth + trend + rng.normal(0, 3e-4, n)
         if use_gp:
             flux = flux + 0.003 * np.sin(2 * np.pi * (t - t[0]) / 0.05)
+        # injected with the model's own shape functions, so a recovery test is
+        # about the branch being wired through rather than about whether
+        # aflare1 and bump_model have the right functional form. Injecting a
+        # plain Gaussian instead leaves a shape mismatch that no amount of
+        # sampling removes, since aflare1 is a fast rise with a slow decay.
         if flare:
+            from timer.model import aflare1
             spec = _flare(t0)
-            dt = t - spec['tpeak']
-            flux = flux + 1e-3 * spec['ampl'] * np.exp(
-                -0.5 * (dt / (spec['fwhm'] / 2.355))**2) * (dt > -spec['fwhm'])
+            flux = flux + 1e-3 * np.asarray(aflare1(
+                t, spec['tpeak'], spec['fwhm'], spec['ampl'], theano=False))
         if bump:
+            from timer.model import bump_model
             spec = _bump(t0)
-            flux = flux + 1e-3 * spec['ampl'] * np.exp(
-                -0.5 * ((t - spec['tcenter']) / spec['width'])**2)
+            flux = flux + 1e-3 * np.asarray(bump_model(
+                t, spec['tcenter'], spec['width'], spec['ampl'], theano=False))
         if clip:
             # one unmistakable outlier, far outside anything the noise produces
             flux[OUTLIER_INDEX] += 12 * 3e-4
@@ -90,7 +99,7 @@ def make_project(root, n=60, use_gp=False, clip=False, uniform=None,
         'tc_pred': t0,
         'tc_pred_unc': 0.02,
         'chromatic': len(bands) > 1,
-        'fixed': ['period', 'u_star'],
+        'fixed': ['period'] if fit_u_star else ['period', 'u_star'],
         'tune': 5, 'draws': 5, 'chains': 1, 'cores': 1,
     }
     if uniform:
@@ -123,6 +132,12 @@ def make_project(root, n=60, use_gp=False, clip=False, uniform=None,
 @pytest.fixture(scope='module')
 def make_project_module():
     return make_project
+
+
+@pytest.fixture(scope='module')
+def outlier_index():
+    """Index of the point make_project(clip=True) spoils."""
+    return OUTLIER_INDEX
 
 
 @pytest.fixture
