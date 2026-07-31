@@ -906,10 +906,24 @@ four times the intended penalty, and would move if that prior were widened.</p>
 it. Recompute rather than mixing them.</p>
 <p>For GP fits, <code>edf</code> is the number of degrees of freedom the GP smoother actually
 absorbs, typically far more than its two or three hyperparameters, and the
-<code>*_edf</code> rows repeat each criterion with that substituted. Treat <code>nparams_edf</code>
-as an upper bound: it does not subtract the overlap between the GP and the
-linear systematics model, so a fit with a wide design matrix is charged for
-some flexibility twice.</p>
+<code>*_edf</code> rows repeat each criterion with that substituted.</p>
+<p><code>nparams_edf</code> subtracts the overlap between the GP and the design matrix <code>X</code>,
+but not the residual overlap with the per-dataset offset or the transit
+parameters, neither of which is a column of <code>X</code>. It is therefore a tight upper
+bound, not an exact figure.</p>
+<p><code>edf</code> is measured at the draw the maximized likelihood came from, not at the
+maximum posterior draw the rest of the outputs are built from. A criterion and
+its penalty have to describe one parameter vector: the edf varies by tens of
+units across a posterior and moves with the likelihood, so taking the two from
+different draws shifts <code>BIC_edf</code> by more than the overlap correction is worth.</p>
+<p>The <code>*_edf</code> rows are omitted entirely, with a logged warning, when a dataset's
+design matrix is rank deficient, since the overlap the correction needs is then
+undefined. Two configurations trigger this in practice: <code>add_bias: true</code>
+together with <code>chunk_offset: true</code> is structurally singular, since the chunk
+indicator columns always sum to the bias column, and outlier clipping can empty
+a chunk indicator column, turning an otherwise full-rank design rank deficient
+after masking. Both fail safe: the uncorrected <code>BIC</code>, <code>AIC</code> and <code>AICc</code> rows
+above are written either way.</p>
 <h3 id="reading-corcsv">Reading *-cor.csv<a class="headerlink" href="#reading-corcsv" title="Permanent link">&para;</a></h3>
 <p><code>yerr</code> is the uncertainty the likelihood used, the photometric error and the
 fitted jitter added in quadrature, not the bare photometric error. Where a

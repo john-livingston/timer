@@ -984,7 +984,7 @@
 <tr>
 <td><code>clip_nsig</code></td>
 <td>Sigma threshold for outlier clipping</td>
-<td><code>7</code></td>
+<td><code>5</code></td>
 </tr>
 <tr>
 <td><code>chunk_offset</code></td>
@@ -993,8 +993,8 @@
 </tr>
 <tr>
 <td><code>chunk_thresh</code></td>
-<td>Gap threshold in days for chunk detection</td>
-<td><code>0</code></td>
+<td>Gap threshold in days above which a new offset column starts; must be &gt; 0 when <code>chunk_offset</code> is enabled</td>
+<td><code>0.02</code></td>
 </tr>
 </tbody>
 </table>
@@ -1170,6 +1170,11 @@
 <td><code>cores</code></td>
 <td>Number of CPU cores</td>
 <td><code>2</code></td>
+</tr>
+<tr>
+<td><code>random_seed</code></td>
+<td>Integer for a reproducible fit, or <code>null</code> to sample unseeded. Seeds both the sampler and the limb darkening priors, which are drawn by marginalizing over the stellar parameter uncertainties</td>
+<td><code>null</code></td>
 </tr>
 <tr>
 <td><code>clobber</code></td>
