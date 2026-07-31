@@ -185,4 +185,5 @@ Multiple bumps work the same as multiple flares -- use lists for any subset of `
 | `draws`   | Number of posterior draws | `2000` |
 | `chains`  | Number of MCMC chains | `2` |
 | `cores`   | Number of CPU cores | `2` |
+| `random_seed` | Integer for a reproducible fit, or `null` to sample unseeded. Seeds both the sampler and the limb darkening priors, which are drawn by marginalizing over the stellar parameter uncertainties | `null` |
 | `clobber` | Re-run even if saved results exist. Saved results are also discarded automatically when the config or data no longer match what produced them | `false` |

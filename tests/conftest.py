@@ -101,6 +101,11 @@ def make_project(root, n=60, use_gp=False, clip=False, uniform=None,
         'chromatic': len(bands) > 1,
         'fixed': ['period'] if fit_u_star else ['period', 'u_star'],
         'tune': 5, 'draws': 5, 'chains': 1, 'cores': 1,
+        # seeded so every assertion about a fitted value is reproducible.
+        # Unseeded, a five draw chain moves enough between runs to flip a
+        # tolerance: two tests here were tuned to thresholds that passed and
+        # then failed on a later run.
+        'random_seed': 20260730,
     }
     if uniform:
         fit_params['uniform'] = uniform
@@ -212,3 +217,8 @@ def gapped_lc(tmp_path):
         'fluxerr': np.full(len(t), 1e-3),
     }).to_csv(fp, index=False)
     return str(fp)
+
+
+@pytest.fixture
+def make_project_fn():
+    return make_project

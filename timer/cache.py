@@ -15,7 +15,7 @@ import os
 FORMAT_VERSION = 2
 
 # keys that affect sampling only, never the model or the MAP solution
-RUN_TIER = frozenset({'tune', 'draws', 'chains'})
+RUN_TIER = frozenset({'tune', 'draws', 'chains', 'random_seed'})
 # keys that affect neither the model nor the results
 NO_EFFECT = frozenset({'cores', 'clobber'})
 

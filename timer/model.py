@@ -141,8 +141,14 @@ def sample(
     tune=1000,
     draws=1000,
     chains=2,
-    cores= 2
+    cores= 2,
+    random_seed=None
 ):
+    """Sample the posterior.
+
+    random_seed makes a run reproducible: the same seed over the same model and
+    data gives the same chain. Left as None the run is unseeded, as before.
+    """
     with model:
         # Filter initvals to only include model variables
         model_var_names = {var.name for var in model.value_vars}
@@ -155,6 +161,7 @@ def sample(
             chains=chains,
             target_accept=0.95,
             init="adapt_full",
+            random_seed=random_seed,
         )
 
     return trace
