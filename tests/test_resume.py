@@ -445,6 +445,24 @@ def test_draws_bump_reuses_the_model_and_resamples(wd, caplog):
 
 
 @pytest.mark.slow
+def test_a_new_seed_refits_the_model_and_resamples(wd, caplog):
+    """The counterpart of the draws bump: a seed is not a sampler-only knob.
+
+    It is passed to numpy's global RNG before the limb darkening priors are
+    drawn, so it moves the priors the MAP is optimized against. Reusing the
+    cached model here would start the chain from a MAP belonging to a different
+    prior set, and derive *-cor.csv and the GP edf from it.
+    """
+    fit_params, sys_params = _load_params(wd)
+    fit_params['random_seed'] = fit_params['random_seed'] + 1
+    with caplog.at_level(logging.INFO):
+        caplog.clear()
+        _run(wd, fit_params, sys_params)
+    assert 'building and optimizing model' in caplog.text
+    assert 'sampling for' in caplog.text
+
+
+@pytest.mark.slow
 def test_missing_manifest_recomputes_everything(wd, caplog):
     """Every output directory that predates this feature is in this state."""
     from timer import cache

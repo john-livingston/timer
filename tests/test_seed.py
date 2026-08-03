@@ -78,7 +78,21 @@ def test_the_seed_defaults_to_none():
     """Unset means unseeded, so ordinary runs keep their present behavior."""
     from timer import fit
 
-    assert fit.defaults['sampler']['random_seed'] is None
+    assert fit.defaults['model']['random_seed'] is None
+
+
+def test_the_sampler_defaults_are_exactly_the_run_tier_and_no_effect_keys():
+    """Which block a default lives in is documentation, and this is what keeps
+    it honest.
+
+    random_seed sat under `sampler` while the cache classified it as run tier,
+    and the two agreed with each other while both were wrong. Pinning the block
+    to the tiers means the next key that reaches the model cannot be filed as a
+    sampler setting without something failing here.
+    """
+    from timer import fit
+
+    assert set(fit.defaults['sampler']) == cache.RUN_TIER | cache.NO_EFFECT
 
 
 def _priors_with_seed(tmp_path, make_project, seed, name):
@@ -128,23 +142,3 @@ def test_seeding_restores_the_callers_global_random_state(tmp_path,
 
     assert np.random.random() == pytest.approx(before)
 
-
-def test_changing_the_seed_invalidates_the_trace_but_not_the_map(tmp_path):
-    """A seed changes the chain, not the model or the MAP, so it belongs in the
-    run tier: a reseeded rerun must resample without paying for a fresh MAP
-    optimization, and must not silently reuse the old trace either.
-    """
-    (tmp_path / 'g.csv').write_text('time,flux,fluxerr\n0.0,1.0,0.001\n')
-    fit_params = {
-        'data': {'g': {'file': 'g.csv', 'band': 'g'}},
-        'tune': 5, 'draws': 5, 'chains': 1, 'cores': 1, 'clobber': False,
-        'random_seed': 1,
-    }
-    sys_params = {'star': {}}
-
-    before = cache.compute_keys(fit_params, sys_params, str(tmp_path))
-    after = cache.compute_keys(dict(fit_params, random_seed=2), sys_params,
-                               str(tmp_path))
-
-    assert after['model'] == before['model']
-    assert after['run'] != before['run']

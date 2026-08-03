@@ -26,6 +26,11 @@ defaults = dict(
         chromatic_bump = False,
         use_gp = False,
         use_custom_optimizer = True,
+        # set to an integer for a reproducible fit; None samples unseeded.
+        # A model setting rather than a sampler one despite the name: it is
+        # applied to numpy's global RNG before the limb darkening priors are
+        # drawn, so it moves the priors and therefore the MAP.
+        random_seed = None,
     ),
 
     sampler = dict(
@@ -33,8 +38,6 @@ defaults = dict(
         draws = 2000,
         chains = 2,
         cores = 2,
-        # set to an integer for a reproducible chain; None samples unseeded
-        random_seed = None,
         clobber = False,
     ),
 
@@ -158,6 +161,7 @@ class TransitFit:
         self.chromatic_bump = fit_params['chromatic_bump']
         self.use_gp = fit_params['use_gp']
         self.use_custom_optimizer = fit_params['use_custom_optimizer']
+        self.random_seed = fit_params['random_seed']
         self.uniform = fit_params.get('uniform', {})
         if self.include_flare:
             self.flare = self.fit_params['flare']
@@ -172,7 +176,6 @@ class TransitFit:
         self.draws = fit_params['draws']
         self.chains = fit_params['chains']
         self.cores = fit_params['cores']
-        self.random_seed = fit_params['random_seed']
         self.clobber = fit_params['clobber']
         # initialize
         self.model = None

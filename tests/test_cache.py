@@ -148,6 +148,21 @@ def test_keys_do_not_depend_on_dict_ordering(project):
         cache.compute_keys(fit_params, sys_params, wd)
 
 
+def test_the_random_seed_lands_in_the_model_tier(project):
+    """The seed reaches limbdark.claret through numpy's global RNG, so it sets
+    the limb darkening priors and therefore the MAP, not only the chain.
+
+    Classifying it as sampling only lets a reseeded rerun load a map.pkl
+    optimized under the previous priors and pair it with the new model. Nothing
+    raises: the stale MAP seeds the sampler, and save_results derives *-cor.csv
+    and the GP effective degrees of freedom from it.
+    """
+    before = keys_for(project, random_seed=None)
+    after = keys_for(project, random_seed=7)
+    assert after['model'] != before['model']
+    assert after['run'] != before['run']
+
+
 def test_an_unknown_setting_lands_in_the_model_tier(project):
     """Options added later must invalidate more rather than less, so anything
     not explicitly classified counts as part of the model."""

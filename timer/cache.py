@@ -14,8 +14,11 @@ import os
 # validate as current and its map.pkl and trace.pkl would be reused.
 FORMAT_VERSION = 2
 
-# keys that affect sampling only, never the model or the MAP solution
-RUN_TIER = frozenset({'tune', 'draws', 'chains', 'random_seed'})
+# keys that affect sampling only, never the model or the MAP solution.
+# random_seed is deliberately absent: it is applied to numpy's global RNG
+# before the limb darkening priors are drawn, so it moves the priors and
+# therefore the MAP, not only the chain.
+RUN_TIER = frozenset({'tune', 'draws', 'chains'})
 # keys that affect neither the model nor the results
 NO_EFFECT = frozenset({'cores', 'clobber'})
 

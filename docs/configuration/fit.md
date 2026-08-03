@@ -71,6 +71,13 @@ Each dataset is listed under `data:` with a user-chosen key. Multiple datasets c
 | `chromatic_flare` | Fit flare amplitude independently per band | `false` |
 | `include_bump` | Include a Gaussian bump model (e.g., spot crossing) | `false` |
 | `chromatic_bump` | Fit bump amplitude independently per band | `false` |
+| `random_seed` | Integer for a reproducible fit, or `null` to sample unseeded | `null` |
+
+### Reproducibility
+
+`random_seed` seeds both the sampler and the limb darkening priors, which are drawn by marginalizing over the stellar parameter uncertainties. Because it reaches the priors it is a model setting, not a sampler one: changing it refits the MAP as well as resampling, so a reseeded rerun costs a full fit rather than a cheap resample.
+
+Output directories written before `random_seed` became a model setting refit once on the next run, since the key that decides whether a saved model still matches now includes it.
 
 ## Priors
 
@@ -185,5 +192,4 @@ Multiple bumps work the same as multiple flares -- use lists for any subset of `
 | `draws`   | Number of posterior draws | `2000` |
 | `chains`  | Number of MCMC chains | `2` |
 | `cores`   | Number of CPU cores | `2` |
-| `random_seed` | Integer for a reproducible fit, or `null` to sample unseeded. Seeds both the sampler and the limb darkening priors, which are drawn by marginalizing over the stellar parameter uncertainties | `null` |
 | `clobber` | Re-run even if saved results exist. Saved results are also discarded automatically when the config or data no longer match what produced them | `false` |
