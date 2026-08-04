@@ -251,3 +251,87 @@ def test_chromatic_writes_a_corrected_light_curve_per_dataset(chromatic_run):
     for band in ('g', 'r'):
         cor = _cor(wd, band)
         assert len(cor) == len(tf.data[band]['x'])
+
+
+# --------------------------------------------- uniform limb darkening bounds
+
+# deliberately narrower than the [0, 1] model.build used to hardcode, so a
+# point outside them is still inside the old range
+U_STAR_BOUNDS = (0.3, 0.7)
+
+
+def _u_star_model(tmp_path_factory, make_project, name, bounds):
+    """A built model whose limb darkening is sampled under `bounds`."""
+    import pymc as pm  # noqa: F401  (imported here to keep the module import light)
+    from timer import fit
+
+    wd = tmp_path_factory.mktemp('branch') / name
+    fit_params, sys_params = make_project(
+        str(wd), uniform={'u_star': list(bounds)}, fit_u_star=True)
+    tf = fit.TransitFit(sys_params, fit_params, wd=str(wd))
+    tf.build_model(verbose=False, plot=False)
+    return tf.model
+
+
+@pytest.fixture(scope='module')
+def u_star_model(tmp_path_factory, make_project_module):
+    return _u_star_model(tmp_path_factory, make_project_module, 'ustar',
+                         U_STAR_BOUNDS)
+
+
+@pytest.fixture(scope='module')
+def u_star_model_full_range(tmp_path_factory, make_project_module):
+    return _u_star_model(tmp_path_factory, make_project_module, 'ustar_full',
+                         (0.0, 1.0))
+
+
+def _logp_at(rv, value):
+    """The model's own verdict on a value, elementwise: -inf means outside the
+    support. Reading the bounds off the site would depend on how PyMC orders
+    an Op's inputs; the support is the behavior that matters."""
+    import numpy as np
+    import pymc as pm
+
+    return np.asarray(pm.logp(rv, np.full(2, value)).eval())
+
+
+def test_configured_u_star_bounds_reach_the_model(u_star_model):
+    """The bug: model.build hardcoded [0, 1] under a comment claiming the
+    bounds came from fit.yaml, so `uniform: u_star: [0.3, 0.7]` sampled over
+    [0, 1] with no error and no warning.
+
+    get_priors already encodes the configured range as a center and a width per
+    band, the same convention every other uniform parameter uses. Only the
+    decoding was missing.
+    """
+    import numpy as np
+
+    lower, upper = U_STAR_BOUNDS
+    rv = u_star_model['u_star_g']
+
+    assert np.isfinite(_logp_at(rv, (lower + upper) / 2)).all()
+    # both of these sit inside the old hardcoded [0, 1], which is what makes
+    # this discriminating rather than a restatement of pm.Uniform
+    assert np.isneginf(_logp_at(rv, lower - 0.05)).all()
+    assert np.isneginf(_logp_at(rv, upper + 0.05)).all()
+
+
+def test_u_star_keeps_both_limb_darkening_coefficients(u_star_model):
+    """The uniform branch stores one scalar center and width per band, not one
+    per coefficient. Passing those through without a shape would collapse the
+    site to a scalar, and the light curve code indexes u_star[0] and u_star[1].
+    """
+    assert tuple(u_star_model['u_star_g'].shape.eval()) == (2,)
+
+
+def test_the_full_u_star_range_still_behaves_as_before(u_star_model_full_range):
+    """The control: [0, 1] is what every config effectively got before the fix,
+    so it has to come out unchanged rather than merely differently wrong."""
+    import numpy as np
+
+    rv = u_star_model_full_range['u_star_g']
+
+    assert np.isfinite(_logp_at(rv, 0.1)).all()
+    assert np.isfinite(_logp_at(rv, 0.9)).all()
+    assert np.isneginf(_logp_at(rv, -0.1)).all()
+    assert np.isneginf(_logp_at(rv, 1.1)).all()

@@ -206,10 +206,14 @@ def build(
                     v[p] = pt.as_tensor_variable(u_star_vals)
                 else:
                     if priors['u_star_prior'] == 'uniform':
-                        # For uniform priors, calculate bounds directly
-                        bounds = np.array([0, 1])  # u_star bounds from fit.yaml
-                        lower = bounds[0]
-                        upper = bounds[1]
+                        # get_priors encodes the configured range as one scalar
+                        # center and width per band, the same convention every
+                        # other uniform parameter uses. shape=2 below broadcasts
+                        # it across both limb darkening coefficients.
+                        center = priors['u_star'][band]
+                        width = priors['u_star_unc'][band]
+                        lower = center - width / 2
+                        upper = center + width / 2
                         initval = priors['u_star_initval'][band] if 'u_star_initval' in priors else priors['u_star'][band]
                         v[p] = pm.Uniform(p, lower=lower, upper=upper, shape=2, initval=initval)
                         if verbose:

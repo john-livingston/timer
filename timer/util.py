@@ -205,7 +205,14 @@ def get_priors(fit_basis, star, planets, fixed, bands, tc_guess, tc_guess_unc, u
         priors['u_star_prior'] = 'uniform'
         bounds = np.array(uniform['u_star'])
         priors['u_star_unc'] = {band:bounds[1] - bounds[0] for band in bands}
-        priors['u_star_initval'] = priors['u_star']
+        # a configured range need not contain the claret draw, and pm.Uniform
+        # does not reject an initval outside its support: it writes nan into
+        # the initial point and the MAP optimization starts from there. Clip
+        # strictly inside, as every other uniform parameter's initval is.
+        epsilon = 1e-10
+        priors['u_star_initval'] = {
+            band:np.clip(ld, bounds[0] + epsilon, bounds[1] - epsilon)
+            for band, ld in priors['u_star'].items()}
         priors['u_star'] = {band:(bounds[0] + bounds[1]) / 2 for band in bands}
     else:
         priors['u_star_prior'] = 'gaussian'

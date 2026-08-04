@@ -159,6 +159,24 @@ def test_u_star_uniform_keeps_the_claret_value_as_the_initial_value():
     assert (initval > 0.0).all() and (initval < 1.0).all()
 
 
+def test_u_star_uniform_clips_the_claret_initial_value_into_the_bounds():
+    """A configured range narrower than the claret draw is the whole point of
+    writing one, and the two need not overlap.
+
+    pm.Uniform does not reject an initval outside its support: it writes nan
+    into the initial point, and the optimizer starts the MAP from there. Every
+    other uniform parameter clips, so u_star does too. The bounds here exclude
+    the second claret coefficient, which sits near 0.18 for this star.
+    """
+    lower, upper = 0.45, 0.55
+    priors = _priors({'u_star': [lower, upper]})
+
+    initval = np.asarray(priors['u_star_initval']['g'])
+
+    assert initval.shape == (2,)
+    assert (initval > lower).all() and (initval < upper).all()
+
+
 def test_a_parameter_not_listed_in_uniform_keeps_its_gaussian_prior():
     """The control: `uniform` must not turn every parameter uniform."""
     priors = _priors({'ror': [0.01, 0.15]})

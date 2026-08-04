@@ -110,6 +110,15 @@ uniform:
   ror: [[0.03, 0.06], [0.01, 0.04]]
 ```
 
+`u_star` takes a single pair, applied to both limb darkening coefficients in every band:
+
+```yaml
+uniform:
+  u_star: [0.0, 1.0]
+```
+
+The starting point stays the Claret value predicted from the stellar parameters, clipped into the bounds if it falls outside them.
+
 ## Flare model
 
 When `include_flare: true`, configure the flare parameters:
