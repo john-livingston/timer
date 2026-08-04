@@ -505,6 +505,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reproducibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -756,6 +773,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reproducibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1066,8 +1100,16 @@
 <td>Fit bump amplitude independently per band</td>
 <td><code>false</code></td>
 </tr>
+<tr>
+<td><code>random_seed</code></td>
+<td>Integer for a reproducible fit, or <code>null</code> to sample unseeded</td>
+<td><code>null</code></td>
+</tr>
 </tbody>
 </table>
+<h3 id="reproducibility">Reproducibility<a class="headerlink" href="#reproducibility" title="Permanent link">&para;</a></h3>
+<p><code>random_seed</code> seeds both the sampler and the limb darkening priors, which are drawn by marginalizing over the stellar parameter uncertainties. Because it reaches the priors it is a model setting, not a sampler one: changing it refits the MAP as well as resampling, so a reseeded rerun costs a full fit rather than a cheap resample.</p>
+<p>Output directories written before <code>random_seed</code> became a model setting refit once on the next run, since the key that decides whether a saved model still matches now includes it.</p>
 <h2 id="priors">Priors<a class="headerlink" href="#priors" title="Permanent link">&para;</a></h2>
 <h3 id="fixed-parameters">Fixed parameters<a class="headerlink" href="#fixed-parameters" title="Permanent link">&para;</a></h3>
 <p>Parameters listed under <code>fixed</code> are held at their <code>sys.yaml</code> values and not sampled:</p>
@@ -1086,58 +1128,63 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">uniform</span><span class="p">:</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">ror</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">0.03</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.06</span><span class="p p-Indicator">],</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.01</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.04</span><span class="p p-Indicator">]]</span>
 </code></pre></div>
+<p><code>u_star</code> takes a single pair, applied to both limb darkening coefficients in every band:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">uniform</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">u_star</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+<p>The starting point stays the Claret value predicted from the stellar parameters, clipped into the bounds if it falls outside them.</p>
 <h2 id="flare-model">Flare model<a class="headerlink" href="#flare-model" title="Permanent link">&para;</a></h2>
 <p>When <code>include_flare: true</code>, configure the flare parameters:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">flare</span><span class="p">:</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">tpeak</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2460925.05</span><span class="w">        </span><span class="c1"># peak time [BJD]</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">tpeak_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">tpeak_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">fwhm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span><span class="w">               </span><span class="c1"># full width at half max [days]</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">fwhm_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span><span class="nt">fwhm_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.5</span><span class="w">                </span><span class="c1"># amplitude [ppt]</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">flare</span><span class="p">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">tpeak</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2460925.05</span><span class="w">        </span><span class="c1"># peak time [BJD]</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">tpeak_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">tpeak_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nt">fwhm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span><span class="w">               </span><span class="c1"># full width at half max [days]</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nt">fwhm_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">fwhm_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.5</span><span class="w">                </span><span class="c1"># amplitude [ppt]</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
 </code></pre></div>
 <h3 id="multiple-flares">Multiple flares<a class="headerlink" href="#multiple-flares" title="Permanent link">&para;</a></h3>
 <p>Multiple flares can be specified by using lists for any subset of parameters. The number of flares is determined by the length of <code>tpeak</code>. Any parameter given as a scalar is broadcast to all flares; any given as a list must match the number of flares.</p>
 <p>Shared parameters (scalar <code>ampl</code>, <code>fwhm</code>, <code>tpeak_unc</code> broadcast to both flares):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">flare</span><span class="p">:</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">tpeak</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2459134.77</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2459134.78</span><span class="p p-Indicator">]</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">tpeak_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span><span class="w">            </span><span class="c1"># shared</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">tpeak_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nt">fwhm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span><span class="w">                 </span><span class="c1"># shared</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nt">fwhm_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span><span class="w">             </span><span class="c1"># shared</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">fwhm_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">                    </span><span class="c1"># shared</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">               </span><span class="c1"># shared</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">flare</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">tpeak</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2459134.77</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2459134.78</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">tpeak_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span><span class="w">            </span><span class="c1"># shared</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">tpeak_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">fwhm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span><span class="w">                 </span><span class="c1"># shared</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">fwhm_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span><span class="w">             </span><span class="c1"># shared</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">fwhm_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">                    </span><span class="c1"># shared</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">               </span><span class="c1"># shared</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
 </code></pre></div>
 <p>Fully independent per-flare parameters:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">flare</span><span class="p">:</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">tpeak</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2460211.8493</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2460211.863</span><span class="p p-Indicator">]</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">tpeak_unc</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.001</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.005</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># per-flare</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">tpeak_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">fwhm</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.01</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.03</span><span class="p p-Indicator">]</span><span class="w">         </span><span class="c1"># per-flare</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">fwhm_unc</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.02</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.06</span><span class="p p-Indicator">]</span><span class="w">     </span><span class="c1"># per-flare</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">fwhm_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">40</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">15</span><span class="p p-Indicator">]</span><span class="w">              </span><span class="c1"># per-flare</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">80</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">30</span><span class="p p-Indicator">]</span><span class="w">          </span><span class="c1"># per-flare</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">flare</span><span class="p">:</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">tpeak</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2460211.8493</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2460211.863</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">tpeak_unc</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.001</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.005</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># per-flare</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">tpeak_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">fwhm</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.01</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.03</span><span class="p p-Indicator">]</span><span class="w">         </span><span class="c1"># per-flare</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">fwhm_unc</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.02</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.06</span><span class="p p-Indicator">]</span><span class="w">     </span><span class="c1"># per-flare</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="nt">fwhm_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">40</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">15</span><span class="p p-Indicator">]</span><span class="w">              </span><span class="c1"># per-flare</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">80</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">30</span><span class="p p-Indicator">]</span><span class="w">          </span><span class="c1"># per-flare</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
 </code></pre></div>
 <p>The parameters that support per-flare lists are: <code>tpeak</code>, <code>tpeak_unc</code>, <code>fwhm</code>, <code>fwhm_unc</code>, <code>ampl</code>, <code>ampl_unc</code>. The <code>*_prior</code> parameters (<code>tpeak_prior</code>, <code>fwhm_prior</code>, <code>ampl_prior</code>) are always scalar and shared across all flares.</p>
 <h2 id="bump-model">Bump model<a class="headerlink" href="#bump-model" title="Permanent link">&para;</a></h2>
 <p>When <code>include_bump: true</code>, configure the bump (e.g., spot crossing) parameters:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">bump</span><span class="p">:</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">tcenter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2460942.08</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">tcenter_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">tcenter_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">width</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">width_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="nt">width_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">bump</span><span class="p">:</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">tcenter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2460942.08</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="nt">tcenter_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.04</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">tcenter_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">width</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="nt">width_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.02</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">width_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="nt">ampl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">  </span><span class="nt">ampl_unc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">  </span><span class="nt">ampl_prior</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uniform</span>
 </code></pre></div>
 <h3 id="multiple-bumps">Multiple bumps<a class="headerlink" href="#multiple-bumps" title="Permanent link">&para;</a></h3>
 <p>Multiple bumps work the same as multiple flares -- use lists for any subset of <code>tcenter</code>, <code>tcenter_unc</code>, <code>width</code>, <code>width_unc</code>, <code>ampl</code>, <code>ampl_unc</code>. Scalars are broadcast; lists must match the number of bumps (determined by <code>tcenter</code> length).</p>
@@ -1170,11 +1217,6 @@
 <td><code>cores</code></td>
 <td>Number of CPU cores</td>
 <td><code>2</code></td>
-</tr>
-<tr>
-<td><code>random_seed</code></td>
-<td>Integer for a reproducible fit, or <code>null</code> to sample unseeded. Seeds both the sampler and the limb darkening priors, which are drawn by marginalizing over the stellar parameter uncertainties</td>
-<td><code>null</code></td>
 </tr>
 <tr>
 <td><code>clobber</code></td>
