@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from timer import fit, io
@@ -235,3 +236,38 @@ def test_trim_from_the_end_that_removes_every_point_raises(unit_spaced_lc):
     with pytest.raises(ValueError) as excinfo:
         io.read_generic(unit_spaced_lc, binsize=None, trim_end=99.0, verbose=False)
     assert 'trim_end' in str(excinfo.value)
+
+
+def _csv_with_airmass(tmp_path, airmass, name='nan.csv'):
+    n = 8
+    fp = tmp_path / name
+    pd.DataFrame({
+        'time': np.linspace(2460000.0, 2460000.1, n),
+        'flux': np.ones(n),
+        'fluxerr': np.full(n, 1e-3),
+        'airmass': airmass,
+    }).to_csv(fp, index=False)
+    return str(fp)
+
+
+def test_read_generic_raises_on_an_all_nan_column_without_binning(tmp_path):
+    """binsize: null skips bin_df, so a check only inside bin_df would still
+    standardize an all-NaN covariate into NaN mean/std and poison the design
+    matrix. The guard has to run on the frame as read.
+    """
+    fp = _csv_with_airmass(tmp_path, np.full(8, np.nan))
+
+    with pytest.raises(ValueError, match='airmass') as excinfo:
+        io.read_generic(fp, binsize=None, verbose=False)
+
+    assert 'NaN' in str(excinfo.value)
+
+
+def test_read_generic_raises_on_an_all_nan_column_when_binning(tmp_path):
+    """The path that actually hit the empty-frame failure: bin_df's dropna
+    after a column that is NaN in every bin.
+    """
+    fp = _csv_with_airmass(tmp_path, np.full(8, np.nan), name='binned.csv')
+
+    with pytest.raises(ValueError, match='airmass'):
+        io.read_generic(fp, binsize=0.01, verbose=False)
