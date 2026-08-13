@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from .util import bin_df, get_spline_basis
+from .util import bin_df, get_spline_basis, reject_all_nan_columns
 
 
 # design matrix column blocks, in the order read_generic appends them
@@ -69,6 +69,10 @@ def read_generic(
     if verbose:
         print(f'\nreading: {os.path.basename(fp)}')
         print(f'cadence: {np.median(np.diff(df[timecol].values))*86400 :.1f} seconds')
+    # binsize: null skips bin_df, so the all-NaN guard has to run on the
+    # frame as read, not only after binning. An all-NaN covariate would
+    # otherwise standardize to NaN mean/std and poison the design matrix.
+    reject_all_nan_columns(df)
     if binsize is not None:
         df = bin_df(df, timecol, errcol, binsize=binsize)
     x, y, yerr = df[[timecol, fluxcol, errcol]].values.T

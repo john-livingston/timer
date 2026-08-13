@@ -24,7 +24,9 @@ classifiers = [
 ]
 dependencies = [
     "pyyaml",
-    "pymc",
+    # pymc 6.x is on PyPI and pulls arviz 1.0. A fresh install on 3.12+
+    # otherwise lands on a major this package has never been tested against.
+    "pymc<6",
     "astropy",
     "patsy",
     "exoplanet",

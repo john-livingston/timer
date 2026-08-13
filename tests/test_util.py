@@ -324,6 +324,36 @@ def test_median_binning_ignores_a_single_bad_frame():
     assert abs(util.bin_df(df, kind='mean', **kwargs).flux.iloc[0] - 1.0) > 0.04
 
 
+def test_bin_df_raises_on_an_all_nan_column():
+    """An auxiliary column of nothing but NaN puts a NaN in every binned row,
+    and dropna then returns an empty frame. The later failure is numpy
+    complaining about a zero-size reduction, far from the column that caused
+    it. Raise and name the column so the caller can fix the file.
+    """
+    df = _binning_fixture(n_per_bin=4, n_bins=3)
+    df['airmass'] = np.nan
+
+    with pytest.raises(ValueError, match='airmass') as excinfo:
+        util.bin_df(df, 'time', 'fluxerr', binsize=1.0)
+
+    assert 'NaN' in str(excinfo.value)
+
+
+def test_bin_df_still_drops_rows_with_sparse_nans():
+    """Partial missingness is still a row problem, not a column one. dropna
+    keeps that behavior; this test fails if the all-NaN guard starts treating
+    any NaN as fatal.
+    """
+    df = _binning_fixture(n_per_bin=4, n_bins=3)
+    df['airmass'] = np.arange(len(df), dtype=float)
+    df.loc[0, 'airmass'] = np.nan
+
+    binned = util.bin_df(df, 'time', 'fluxerr', binsize=1.0)
+
+    assert len(binned) > 0
+    assert 'airmass' in binned.columns
+
+
 # ------------------------------------------------------------- claret bands
 
 @pytest.mark.parametrize('band,expected', [

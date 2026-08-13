@@ -31,7 +31,7 @@ pip install git+https://github.com/john-livingston/limbdark
 
 Installed automatically via pip:
 
-- pymc
+- pymc, pinned below 6: 6.x pulls arviz 1.0
 - exoplanet, exoplanet-core
 - celerite2, pinned below 0.3.3, whose pymc backend imports jax
 - astropy

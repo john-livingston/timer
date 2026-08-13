@@ -314,7 +314,25 @@ def bin_df(df, timecol='time', errcol='flux_err', binsize=60/86400., kind='media
         df_binned = groups.mean()
         scale = 1.0
     df_binned[errcol] = scale * groups.median()[errcol] / np.sqrt(groups.size())
+    reject_all_nan_columns(df_binned)
     return df_binned.dropna()
+
+
+def reject_all_nan_columns(df):
+    """Raise if any column is entirely missing.
+
+    bin_df ends with dropna, so one all-NaN column empties every row and the
+    caller sees a numpy zero-size reduction far from the file. Name the
+    column so the producer can stop writing it. Sparse NaNs stay a row
+    problem for dropna.
+    """
+    bad = [c for c in df.columns if df[c].isna().all()]
+    if not bad:
+        return
+    names = ', '.join(repr(str(c)) for c in bad)
+    raise ValueError(
+        f'column(s) {names} are all NaN; fix the file at the source'
+    )
 
 # The GP hyperparameter sites model.build creates, shared or per dataset.
 # Deliberately not the bare 'gp_log_' prefix: a dataset named 'gp' has a

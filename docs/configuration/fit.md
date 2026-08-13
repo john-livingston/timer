@@ -30,7 +30,9 @@ fixed:
 
 ## Data
 
-Each dataset is listed under `data:` with a user-chosen key. Multiple datasets can be specified for simultaneous multi-band fitting.
+Each dataset is listed under `data:` with a user-chosen key. That key is the plot legend label, so it should be whatever belongs in a publication-ready figure. It must be unique even when two datasets share a band: two nights in `g` both labeled `g` would collide. `file` and `band` sit under the key; `band` is the photometric band, not the legend text.
+
+Multiple datasets can be specified for simultaneous multi-band fitting.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
