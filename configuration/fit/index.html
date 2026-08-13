@@ -945,7 +945,8 @@
 <a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">u_star</span>
 </code></pre></div>
 <h2 id="data">Data<a class="headerlink" href="#data" title="Permanent link">&para;</a></h2>
-<p>Each dataset is listed under <code>data:</code> with a user-chosen key. Multiple datasets can be specified for simultaneous multi-band fitting.</p>
+<p>Each dataset is listed under <code>data:</code> with a user-chosen key. That key is the plot legend label, so it should be whatever belongs in a publication-ready figure. It must be unique even when two datasets share a band: two nights in <code>g</code> both labeled <code>g</code> would collide. <code>file</code> and <code>band</code> sit under the key; <code>band</code> is the photometric band, not the legend text.</p>
+<p>Multiple datasets can be specified for simultaneous multi-band fitting.</p>
 <table>
 <thead>
 <tr>
