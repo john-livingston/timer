@@ -1,6 +1,12 @@
 # timer
 
+![CI](https://github.com/john-livingston/timer/actions/workflows/ci.yml/badge.svg)
+
 A Python package for transit fitting analysis.
+
+Documentation: [john-livingston.github.io/timer](https://john-livingston.github.io/timer)
+
+---
 
 ## Installation
 
