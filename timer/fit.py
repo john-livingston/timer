@@ -177,6 +177,8 @@ class TransitFit:
         self.chains = fit_params['chains']
         self.cores = fit_params['cores']
         self.clobber = fit_params['clobber']
+        self.plot_midtransit = fit_params.get('plot_midtransit', False)
+        self.plot_ingress_egress = fit_params.get('plot_ingress_egress', False)
         # initialize
         self.model = None
         self.map_soln = None
@@ -374,6 +376,24 @@ class TransitFit:
             plt.errorbar(x, y, yerr, ls='', label=name)
             plt.xlabel(f"time [BJD$-${ref_time}]")
             plt.ylabel("relative flux [ppt]")
+        if self.plot_midtransit or self.plot_ingress_egress:
+            # Use the model's prior centers, including tc_pred overrides, in
+            # the common reference-time frame established by load_data().
+            x_mid = np.mean(np.concatenate([d['x'] for d in self.data.values()]))
+            periods = np.broadcast_to(self.priors['period'], (self.nplanets,))
+            centers = np.broadcast_to(self.priors['t0'], (self.nplanets,))
+            durations = np.broadcast_to(self.priors['dur'], (self.nplanets,))
+            for planet, period, center, duration in zip(self.planets, periods, centers, durations):
+                mid = center + np.round((x_mid - center) / period) * period
+                suffix = f' {planet}' if self.nplanets > 1 else ''
+                if self.plot_midtransit:
+                    plt.axvline(mid, color='k', ls='-', alpha=0.7,
+                                label=f'midtransit{suffix}')
+                if self.plot_ingress_egress:
+                    plt.axvline(mid - duration / 2, color='k', ls='--', alpha=0.7,
+                                label=f'ingress{suffix}')
+                    plt.axvline(mid + duration / 2, color='k', ls='--', alpha=0.7,
+                                label=f'egress{suffix}')
         fn = f'data.png'
         plt.tight_layout()
         plt.legend()

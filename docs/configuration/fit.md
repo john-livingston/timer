@@ -204,3 +204,17 @@ Multiple bumps work the same as multiple flares -- use lists for any subset of `
 | `chains`  | Number of MCMC chains | `2` |
 | `cores`   | Number of CPU cores | `2` |
 | `clobber` | Re-run even if saved results exist. Saved results are also discarded automatically when the config or data no longer match what produced them | `false` |
+
+## Predicted event markers
+
+Set `plot_midtransit: true` to draw a solid center line on `data.png`, and
+`plot_ingress_egress: true` to draw dashed first/last-contact lines at center
+minus/plus half the configured total duration. Both default to `false` and
+can be enabled independently. They do not change the model or invalidate
+saved sampling results.
+
+Markers use the model prior centers (`tc_pred` or `tc_pred_iso` when supplied,
+otherwise the data-centered default), periods, and durations. Each planet's
+nearest event to the mean observation time is drawn in the data's common BJD
+reference frame. These are predictions, not posterior contact-time estimates;
+no second/third-contact lines or timing uncertainties are shown.

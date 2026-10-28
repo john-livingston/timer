@@ -20,7 +20,7 @@ FORMAT_VERSION = 2
 # therefore the MAP, not only the chain.
 RUN_TIER = frozenset({'tune', 'draws', 'chains'})
 # keys that affect neither the model nor the results
-NO_EFFECT = frozenset({'cores', 'clobber'})
+NO_EFFECT = frozenset({'cores', 'clobber', 'plot_midtransit', 'plot_ingress_egress'})
 
 
 def _digest(obj):
