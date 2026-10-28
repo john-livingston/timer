@@ -94,7 +94,7 @@ def get_map_soln(trace):
     return get_soln_at(trace, chain, draw), float(np.nanmax(lp_values))
 
 def get_var_names(data, bands, fit_basis, use_gp, fixed,
-                  chromatic=False, log_sigma=True, weights=False, gp_config=None):
+                  chromatic=False, log_sigma=True, weights=False, gp_config=None, secondary_eclipse=False):
 
     var_names = []
     for par in 't0 period b dur'.split():
@@ -106,6 +106,9 @@ def get_var_names(data, bands, fit_basis, use_gp, fixed,
                 var_names += [f'ror_{band}']
         else:
             var_names += ['ror']
+    if secondary_eclipse and 'eclipse_depth' not in fixed:
+        var_names += ([f'eclipse_depth_{band}' for band in bands]
+                      if chromatic else ['eclipse_depth'])
     if (fit_basis == 'mstar/rstar') and not any(['m_star' in fixed, 'r_star' in fixed]):
         var_names += ['m_star', 'r_star']
     if use_gp:
@@ -124,11 +127,11 @@ def get_var_names(data, bands, fit_basis, use_gp, fixed,
     return var_names
 
 def get_summary(trace, data, bands, fit_basis, use_gp, fixed,
-                chromatic=False, log_sigma=True, weights=False, gp_config=None):
+                chromatic=False, log_sigma=True, weights=False, gp_config=None, secondary_eclipse=False):
 
     var_names = get_var_names(data, bands, fit_basis, use_gp, fixed,
                               chromatic=chromatic, log_sigma=log_sigma, weights=weights,
-                              gp_config=gp_config)
+                              gp_config=gp_config, secondary_eclipse=secondary_eclipse)
     summary = az.summary(
         trace,
         var_names=var_names

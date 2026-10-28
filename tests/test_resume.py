@@ -33,6 +33,7 @@ def _bare_fit(tmp_path, stale, model=None, map_soln=None):
     tf.include_mean = True
     tf.include_flare = tf.chromatic_flare = False
     tf.include_bump = tf.chromatic_bump = False
+    tf.secondary_eclipse = False
     tf.use_custom_optimizer = True
     tf.gp_config = None
     return tf

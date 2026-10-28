@@ -81,7 +81,7 @@ def test_the_seed_defaults_to_none():
     assert fit.defaults['model']['random_seed'] is None
 
 
-def test_the_sampler_defaults_are_exactly_the_run_tier_and_no_effect_keys():
+def test_sampler_and_plot_options_match_run_tier_and_no_effect_keys():
     """Which block a default lives in is documentation, and this is what keeps
     it honest.
 
@@ -92,7 +92,8 @@ def test_the_sampler_defaults_are_exactly_the_run_tier_and_no_effect_keys():
     """
     from timer import fit
 
-    assert set(fit.defaults['sampler']) == cache.RUN_TIER | cache.NO_EFFECT
+    plot_options = {'plot_midtransit', 'plot_ingress_egress'}
+    assert set(fit.defaults['sampler']) | plot_options == cache.RUN_TIER | cache.NO_EFFECT
 
 
 def _priors_with_seed(tmp_path, make_project, seed, name):

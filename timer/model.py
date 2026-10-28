@@ -185,9 +185,13 @@ def build(
     logp_threshold=1,
     sequential_opt=False,
     use_custom_optimizer=True,
-    gp_config=None
+    gp_config=None,
+    secondary_eclipse=False
 ):
     logging.info("Building model with optimizer: %s", 'custom' if use_custom_optimizer else 'pymc')
+
+    if secondary_eclipse and nplanets != 1:
+        raise ValueError('secondary_eclipse currently supports one planet only')
 
     with pm.Model() as model:
 
@@ -353,7 +357,7 @@ def build(
         
         # Orbit model
         if basis == 'duration':
-            if chromatic:
+            if chromatic and 'ror' not in fixed:
                 ror = pt.mean([v[f'ror_{band}'] for band in bands])
             else:
                 ror = v['ror']
@@ -367,6 +371,17 @@ def build(
         else:
             raise ValueError(f'basis={basis} not supported')
             
+        if secondary_eclipse:
+            # Depth is the fraction of total out-of-eclipse flux removed by
+            # a full occultation, independent of the geometric radius ratio.
+            for band in bands if chromatic else [None]:
+                key = f'eclipse_depth_{band}' if chromatic else 'eclipse_depth'
+                if 'eclipse_depth' in fixed:
+                    v[key] = priors['eclipse_depth']
+                else:
+                    v[key] = get_rv(key='eclipse_depth', name=key, priors=priors,
+                                    shape=nplanets, verbose=verbose)
+
         # GP shared parameters (sampled once, used by all datasets)
         gp_shared = {}
         if use_gp:
@@ -488,12 +503,21 @@ def build(
                 bump = 0
 
             # Compute the model light curve
-            if chromatic:
+            if chromatic and 'ror' not in fixed:
                 ror = v[f'ror_{band}']
             else:
                 ror = v['ror']
+            light_curve_model = v[f'star_{band}']
+            if secondary_eclipse:
+                depth_key = f'eclipse_depth_{band}' if chromatic else 'eclipse_depth'
+                depth = v[depth_key]
+                # exoplanet expects surface brightness, not integrated flux.
+                # A uniform planetary disk has Fp/Fstar = s * (Rp/Rstar)**2.
+                surface_brightness = depth / (1 - depth) / ror**2
+                light_curve_model = xo.SecondaryEclipseLightCurve(
+                    v[f'u_star_{band}'], [0., 0.], surface_brightness)
             light_curves = (
-                v[f'star_{band}'].get_light_curve(orbit=orbit, r=ror, t=x[mask], texp=texp, use_in_transit=False)
+                light_curve_model.get_light_curve(orbit=orbit, r=ror, t=x[mask], texp=texp, use_in_transit=False)
                 * 1e3
             )
             pm.Deterministic(f"{name}_light_curves", light_curves)
@@ -502,7 +526,7 @@ def build(
 
             # Compute high-res model light curve
             light_curves_hr = (
-                v[f'star_{band}'].get_light_curve(orbit=orbit, r=ror, t=x_hr, texp=texp, use_in_transit=False)
+                light_curve_model.get_light_curve(orbit=orbit, r=ror, t=x_hr, texp=texp, use_in_transit=False)
                 * 1e3
             )
             pm.Deterministic(f"{name}_light_curves_hr", light_curves_hr)
