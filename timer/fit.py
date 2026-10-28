@@ -19,6 +19,7 @@ defaults = dict(
         fixed = [], # transit model parameters (duration basis): m_star r_star t0 period ror b dur u_star
         fit_basis = 'duration',
         chromatic = False,
+        secondary_eclipse = False,
         include_mean = True, # the mean flux value (should not be True if add_bias=True)
         include_flare = False,
         chromatic_flare = False,
@@ -118,6 +119,16 @@ class TransitFit:
         # Get number of planets for validation
         nplanets = len(self.fit_params['planets'])
 
+        if self.fit_params['secondary_eclipse'] and nplanets != 1:
+            raise ValueError('secondary_eclipse currently supports one planet only')
+        if self.fit_params['secondary_eclipse']:
+            bounds = np.asarray(self.fit_params.get('uniform', {}).get('eclipse_depth', [0., 1.]))
+            if (bounds.shape != (2,) or not np.all(np.isfinite(bounds))
+                    or not 0 <= bounds[0] < bounds[1] <= 1):
+                raise ValueError('eclipse_depth bounds must satisfy 0 <= lower < upper <= 1')
+            if 'eclipse_depth' in fixed_params:
+                raise ValueError('fixed eclipse_depth is supported by model.build only; configure uniform bounds in fit.yaml')
+
         # Validate bounds
         for param, bounds in self.fit_params.get('uniform', {}).items():
             # Check if we have planet-indexed bounds or single bounds
@@ -154,6 +165,7 @@ class TransitFit:
         self.fit_basis = fit_params['fit_basis']
         self.planets = fit_params['planets']
         self.chromatic = fit_params['chromatic']
+        self.secondary_eclipse = fit_params['secondary_eclipse']
         self.include_mean = fit_params['include_mean']
         self.include_flare = fit_params['include_flare']
         self.chromatic_flare = fit_params['chromatic_flare']
@@ -177,6 +189,8 @@ class TransitFit:
         self.chains = fit_params['chains']
         self.cores = fit_params['cores']
         self.clobber = fit_params['clobber']
+        self.plot_midtransit = fit_params.get('plot_midtransit', False)
+        self.plot_ingress_egress = fit_params.get('plot_ingress_egress', False)
         # initialize
         self.model = None
         self.map_soln = None
@@ -374,6 +388,26 @@ class TransitFit:
             plt.errorbar(x, y, yerr, ls='', label=name)
             plt.xlabel(f"time [BJD$-${ref_time}]")
             plt.ylabel("relative flux [ppt]")
+        if self.plot_midtransit or self.plot_ingress_egress:
+            # Use the model's prior centers, including tc_pred overrides, in
+            # the common reference-time frame established by load_data().
+            x_mid = np.mean(np.concatenate([d['x'] for d in self.data.values()]))
+            periods = np.broadcast_to(self.priors['period'], (self.nplanets,))
+            centers = np.broadcast_to(self.priors['t0'], (self.nplanets,))
+            durations = np.broadcast_to(self.priors['dur'], (self.nplanets,))
+            for planet, period, center, duration in zip(self.planets, periods, centers, durations):
+                if self.secondary_eclipse:
+                    center += period / 2
+                mid = center + np.round((x_mid - center) / period) * period
+                suffix = f' {planet}' if self.nplanets > 1 else ''
+                if self.plot_midtransit:
+                    plt.axvline(mid, color='k', ls='-', alpha=0.7,
+                                label=f"{'mid-eclipse' if self.secondary_eclipse else 'midtransit'}{suffix}")
+                if self.plot_ingress_egress:
+                    plt.axvline(mid - duration / 2, color='k', ls='--', alpha=0.7,
+                                label=f'ingress{suffix}')
+                    plt.axvline(mid + duration / 2, color='k', ls='--', alpha=0.7,
+                                label=f'egress{suffix}')
         fn = f'data.png'
         plt.tight_layout()
         plt.legend()
@@ -401,6 +435,18 @@ class TransitFit:
         finally:
             if state is not None:
                 np.random.set_state(state)
+        if self.secondary_eclipse:
+            lower, upper = self.uniform.get('eclipse_depth', [0., 1.])
+            self.priors['eclipse_depth'] = (lower + upper) / 2
+            self.priors['eclipse_depth_unc'] = upper - lower
+            self.priors['eclipse_depth_prior'] = 'uniform'
+            # A small positive starting depth, strictly inside the prior.
+            self.priors['eclipse_depth_initval'] = np.clip(
+                .001, lower + 1e-6 * (upper - lower), upper - 1e-6 * (upper - lower))
+            if 'tc_pred' not in self.fit_params and 'tc_pred_iso' not in self.fit_params:
+                # The default data-centered guess describes the observed
+                # eclipse, while t0 always denotes the primary-transit epoch.
+                self.priors['t0'] = self.priors['t0'] - self.priors['period'] / 2
         # Add log_sigma_lc priors based on data
         self._add_log_sigma_lc_priors()
         if self.include_flare:
@@ -489,7 +535,8 @@ class TransitFit:
             self.model, self.map_soln = model.build(
                 data, priors, nplanets, use_gp=use_gp, fixed=fixed, basis=fit_basis, chromatic=chromatic,
                 masks=masks, start=start, include_mean=include_mean, include_flare=include_flare, chromatic_flare=chromatic_flare, include_bump=include_bump, chromatic_bump=chromatic_bump,
-                verbose=verbose, use_custom_optimizer=use_custom_optimizer, gp_config=self.gp_config
+                verbose=verbose, use_custom_optimizer=use_custom_optimizer, gp_config=self.gp_config,
+                secondary_eclipse=self.secondary_eclipse
             )
             logging.info(f"Model: {self.model}")
             for artifact, obj in (('model.pkl', self.model), ('map.pkl', self.map_soln)):
@@ -670,7 +717,8 @@ class TransitFit:
         with self.model:
             self.summary = util.get_summary(
                 self.trace, self.data, self.bands, self.fit_basis, self.use_gp, self.fixed,
-                chromatic=self.chromatic, gp_config=self.gp_config
+                chromatic=self.chromatic, gp_config=self.gp_config,
+                secondary_eclipse=self.secondary_eclipse
             )
             logging.info(f'r_hat max: {self.summary["r_hat"].max()}')
             
@@ -744,7 +792,7 @@ class TransitFit:
             chromatic_flare=self.chromatic_flare,
             include_bump=include_bump&self.include_bump,
             chromatic_bump=self.chromatic_bump,
-            subset=subset
+            subset=subset, secondary_eclipse=self.secondary_eclipse
         )
         if fn is None:
             fn = 'corner.png'
@@ -757,7 +805,7 @@ class TransitFit:
         print('generating trace plot')
         var_names = util.get_var_names(
             self.data, self.bands, self.fit_basis, self.use_gp, self.fixed, self.chromatic,
-            gp_config=self.gp_config
+            gp_config=self.gp_config, secondary_eclipse=self.secondary_eclipse
         )
         with self.model:
             az.plot_trace(self.trace, var_names=var_names)

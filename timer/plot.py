@@ -38,7 +38,7 @@ def plot_outliers(x, resid, mask, fp=None):
         plt.savefig(fp)
 
 def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data, 
-           chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, chromatic_bump=False, show_prior=True, subset=None):
+           chromatic=False, sigma_lc=True, include_flare=False, chromatic_flare=False, include_bump=False, chromatic_bump=False, show_prior=True, subset=None, secondary_eclipse=False):
 
     # If subset is specified, expand multi-component parameters if needed
     if subset is not None:
@@ -77,6 +77,10 @@ def corner(trace, soln, priors, use_gp, fixed, nplanets, bands, data,
             else:
                 param_names += [f'ror_{i+1}' for i in range(nplanets)] if nplanets > 1 else ['ror']
         
+        if secondary_eclipse and 'eclipse_depth' not in fixed:
+            param_names += ([f'eclipse_depth_{band}' for band in bands]
+                            if chromatic else ['eclipse_depth'])
+
         if sigma_lc:
             for name in data.keys():
                 param_names.append(f'{name}_log_sigma_lc')
@@ -349,6 +353,8 @@ def corner_subset(trace, soln, priors, param_names, show_prior=True, **corner_kw
                 if 'ror' in name and len(name_parts) >= 2:
                     # Chromatic ror like 'ror_g'
                     par = name_parts[0]
+                elif name.startswith('eclipse_depth_'):
+                    par = 'eclipse_depth'
                 elif len(name_parts) >= 3 and name_parts[0] == 'flare' and name_parts[1] == 'ampl':
                     # Chromatic flare amplitude like 'flare_ampl_g'
                     par = 'flare_ampl'

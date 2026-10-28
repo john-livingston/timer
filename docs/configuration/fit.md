@@ -68,6 +68,7 @@ Multiple datasets can be specified for simultaneous multi-band fitting.
 | `tc_pred_iso` | Alternative: predicted transit time in ISO format | - |
 | `fit_basis` | Parameterization: `duration` or `mstar/rstar` | `duration` |
 | `chromatic` | Fit radius ratio independently per band | `false` |
+| `secondary_eclipse` | Include a physical secondary eclipse and companion flux (see below) | `false` |
 | `include_mean` | Fit a mean flux offset per dataset | `true` |
 | `include_flare` | Include a stellar flare model | `false` |
 | `chromatic_flare` | Fit flare amplitude independently per band | `false` |
@@ -204,3 +205,63 @@ Multiple bumps work the same as multiple flares -- use lists for any subset of `
 | `chains`  | Number of MCMC chains | `2` |
 | `cores`   | Number of CPU cores | `2` |
 | `clobber` | Re-run even if saved results exist. Saved results are also discarded automatically when the config or data no longer match what produced them | `false` |
+
+## Predicted event markers
+
+Set `plot_midtransit: true` to draw a solid center line on `data.png`, and
+`plot_ingress_egress: true` to draw dashed first/last-contact lines at center
+minus/plus half the configured total duration. Both default to `false` and
+can be enabled independently. They do not change the model or invalidate
+saved sampling results.
+
+Markers use the model prior centers (`tc_pred` or `tc_pred_iso` when supplied,
+otherwise the data-centered default), periods, and durations. Each planet's
+nearest event to the mean observation time is drawn in the data's common BJD
+reference frame. These are predictions, not posterior contact-time estimates;
+no second/third-contact lines or timing uncertainties are shown.
+
+## Secondary eclipses
+
+`secondary_eclipse: true` selects exoplanet's `SecondaryEclipseLightCurve`,
+which includes both the primary transit and the physical occultation of the
+companion. It does not move a primary-transit profile to phase 0.5. The default
+is `false`, retaining the primary-transit-only model.
+
+This mode currently supports one planet, the existing circular duration-basis
+orbit, and a uniform-brightness planetary disk (zero planetary limb darkening).
+The stellar quadratic limb darkening remains unchanged. Eccentric orbits,
+phase variations, light-travel delays, and multiple luminous companions are
+not modeled. Multiple planets are rejected explicitly in this mode.
+
+`t0` and an explicitly supplied `tc_pred`/`tc_pred_iso` still denote **primary
+transit**, in BJD. The eclipse is at `t0 + period/2`. Without a predicted center,
+the default guess places the eclipse at the data center and infers the primary
+epoch half a period earlier. `plot_midtransit` then draws a line labeled
+`mid-eclipse`; ingress/egress markers describe that eclipse. Saved `tc` values
+continue to refer to primary transit.
+
+`eclipse_depth` is the fraction of total star-plus-planet flux lost during a
+full occultation, not the radius ratio or surface-brightness ratio. A grazing
+occultation is shallower. The model converts depth `d` into a surface-brightness
+ratio `d / ((1-d) * (Rp/Rstar)**2)` for exoplanet and includes companion-light
+dilution of the primary transit. Exposure integration applies to both events.
+
+The default depth prior is uniform on `[0, 1]`. This deliberately broad prior
+makes the checkbox usable without an additional setting; constrain it for the
+system being fitted through the existing uniform-prior configuration:
+
+```yaml
+secondary_eclipse: true
+tc_pred: 2460844.98  # primary transit, not eclipse
+uniform:
+  eclipse_depth: [0.0, 0.01]  # example bounds in relative flux (0 to 1 percent)
+```
+
+The starting depth is 0.001, clipped strictly inside the configured bounds.
+With `chromatic: true`, each band gets an independent `eclipse_depth_<band>`
+with the same configured prior bounds; otherwise one depth is shared.
+Depths appear in the summary, trace, corner plot, and posterior exports.
+For eclipse-only observations, use externally constrained orbital geometry
+and radius ratio: eclipse depth alone does not measure `Rp/Rstar`.
+
+Changing eclipse settings invalidates the saved model and samples.
