@@ -100,9 +100,7 @@ def optimize(
 def get_point(wrapper, x):
     """Convert optimized parameters back to PyMC point format"""
     vars = get_default_varnames(wrapper.model.unobserved_value_vars, include_transformed=True)
-    values = wrapper.model.compile_fn(vars, mode="FAST_COMPILE")(
-        DictToArrayBijection.rmap(RaveledVars(x, wrapper.bij.point_map_info))
-    )
+    values = wrapper.model.compile_fn(vars, mode="FAST_COMPILE")(wrapper.point(x))
     return {var.name: value for var, value in zip(vars, values)}
 
 
@@ -126,6 +124,12 @@ class ModelWrapper:
         self.bij = DictToArrayBijection.map({
             var.name: start[var.name] for var in vars if var.name in start
         })
+
+        # The compiled functions take every value variable as input. The
+        # ones that are not being optimized keep their starting value, so
+        # that a subset of the variables can be fitted with the rest held.
+        value_names = [var.name for var in model.value_vars]
+        self.held = {k: start[k] for k in value_names if k in start}
         
         # Pre-compile the model logp and gradient
         logp = model.logp()
@@ -133,11 +137,17 @@ class ModelWrapper:
         # Use fast compilation mode for better performance
         self.func = model.compile_fn([logp] + grad_logp, mode="FAST_COMPILE")
     
+    def point(self, vec):
+        """Full model point: the optimized variables from vec, the rest held."""
+        point = dict(self.held)
+        point.update(DictToArrayBijection.rmap(RaveledVars(vec, self.bij.point_map_info)))
+        return point
+
     def __call__(self, vec):
         """Evaluate negative log probability and its gradient"""
         try:
             # Convert parameter vector back to point format
-            point = DictToArrayBijection.rmap(RaveledVars(vec, self.bij.point_map_info))
+            point = self.point(vec)
             
             logging.debug(f"Evaluating point with {len(vec)} parameters")
             logging.debug(f"Parameter vector stats: min={np.min(vec):.6f}, max={np.max(vec):.6f}, any_nan={np.any(np.isnan(vec))}")

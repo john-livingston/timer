@@ -50,3 +50,21 @@ def test_hitting_the_evaluation_limit_still_returns_a_point(tiny_model, monkeypa
 
     assert 'a' in point
     assert np.isfinite(point['a'])
+
+
+def test_optimize_holds_variables_outside_vars_at_their_start():
+    """Only the listed variables move.
+
+    With b held at 0, the posterior for a is a unit normal prior times one
+    observation of 3 with unit noise, so a = 1.5. Optimizing both would give
+    a = b = 1, so 1.5 is only reachable if b really stays put.
+    """
+    with pm.Model() as model:
+        a = pm.Normal('a', 0.0, 1.0)
+        b = pm.Normal('b', 0.0, 1.0)
+        pm.Normal('y_observed', mu=a + b, sigma=1.0, observed=np.array([3.0]))
+    start = model.initial_point()
+    point = optim.optimize(start=start, vars=[model.rvs_to_values[a]],
+                           model=model, verbose=False)
+    assert point['a'] == pytest.approx(1.5, abs=1e-4)
+    assert point['b'] == pytest.approx(0.0, abs=1e-12)
