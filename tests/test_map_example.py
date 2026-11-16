@@ -31,3 +31,11 @@ def test_example_map_keeps_the_transit_at_the_observed_ingress(tmp_path):
     t0 = float(np.ravel(tf.map_soln['t0'])[0])
     assert 0.05 < ror < 0.08
     assert t0 == pytest.approx(1.031, abs=0.01)
+
+    # The staged custom optimizer reaches -879.1. If it fails, build falls
+    # back to pm.find_MAP, which lands on a similar transit at about -927, so
+    # the parameter checks above would not notice.
+    value_names = [var.name for var in tf.model.value_vars]
+    point = {k: tf.map_soln[k] for k in value_names}
+    logp = float(sum(tf.model.point_logps(point).values()))
+    assert logp > -900
