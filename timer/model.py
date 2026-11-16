@@ -565,7 +565,25 @@ def build(
         if use_custom_optimizer:
             logging.info("Using custom optimizer")
             try:
-                map_soln = optim.optimize(start=start, model=model)
+                # Fit everything except the transit first. The systematics
+                # start unfitted, and in a joint optimization from that point
+                # the transit parameters move to absorb them and settle in a
+                # worse optimum. Holding the transit at its starting values
+                # until the systematics are fitted avoids that.
+                transit_names = {'dur', 't0', 'period', 'ror', 'b'}
+                transit_names |= {f'{p}_{band}' for p in ('ror', 'u_star') for band in bands}
+                transit_values = {
+                    model.rvs_to_values[rv].name for rv in model.free_RVs
+                    if rv.name in transit_names
+                }
+                other_vars = [
+                    var for var in model.continuous_value_vars
+                    if var.name not in transit_values
+                ]
+                joint_start = start
+                if other_vars and transit_values:
+                    joint_start = optim.optimize(start=start, vars=other_vars, model=model)
+                map_soln = optim.optimize(start=joint_start, model=model)
                 logging.info("Custom optimizer completed successfully")
             except Exception as e:
                 logging.warning(f"Custom optimizer failed: {e}")
