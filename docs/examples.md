@@ -118,7 +118,6 @@ gp:
   log_scale_unc: 4
   log_scale_prior: uniform
   per_dataset: [log_amp]
-n_restarts: 5
 ```
 
 The transit timing measurement from the GP fit is within ~0.3-sigma of the spline fit.

@@ -982,12 +982,13 @@ def setup_logging(outdir, verbose=False):
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     
-    # Console handler - only if verbose
-    if verbose:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
+    # Console handler - everything if verbose, otherwise warnings and errors
+    # only, so that a fallback or a skipped step is never visible in the log
+    # file alone
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO if verbose else logging.WARNING)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
     
     return log_file
 

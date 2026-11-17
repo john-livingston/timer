@@ -47,4 +47,3 @@ fixed:
 #   log_scale_unc: 4
 #   log_scale_prior: uniform
 #   per_dataset: [log_amp]
-# n_restarts: 5
